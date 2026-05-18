@@ -44,4 +44,9 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+
+    // Retrofit core library for making HTTP internet requests
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+// Gson converter to automatically parse incoming JSON data streams
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
 }
