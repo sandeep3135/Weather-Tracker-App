@@ -1,6 +1,8 @@
 package com.example.weathertrackerapp
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
 import android.view.View
@@ -13,6 +15,11 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -26,16 +33,14 @@ class MainActivity : AppCompatActivity() {
     private val requestLocationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions: Map<String, Boolean> ->
-        val fineLocationGranted: Boolean = permissions[android.Manifest.permission.ACCESS_FINE_LOCATION] ?: false
-        val coarseLocationGranted: Boolean = permissions[android.Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+        val fineLocationGranted = permissions[android.Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        val coarseLocationGranted = permissions[android.Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
 
         if (fineLocationGranted || coarseLocationGranted) {
-            // ⭐ Success: Hardware sensors unlocked!
-            Toast.makeText(this, "Location permission granted. Fetching local coordinates...", Toast.LENGTH_SHORT).show()
-            // TODO: Invoke GPS extraction pipeline function here
+            Toast.makeText(this, "Permission granted. Fetching weather...", Toast.LENGTH_SHORT).show()
+            fetchLocationAndWeather()
         } else {
-            // 🛑 Denied: Security wall active
-            Toast.makeText(this, "Permission denied. Please search your city manually.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Permission denied. Search manually.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -68,13 +73,67 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Trigger runtime permission check sequence automatically on launch
-        requestLocationPermissionLauncher.launch(
-            arrayOf(
-                android.Manifest.permission.ACCESS_FINE_LOCATION,
-                android.Manifest.permission.ACCESS_COARSE_LOCATION
+        // Check if permissions are already granted to avoid unnecessary popup refresh
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            fetchLocationAndWeather()
+        } else {
+            requestLocationPermissionLauncher.launch(
+                arrayOf(
+                    android.Manifest.permission.ACCESS_FINE_LOCATION,
+                    android.Manifest.permission.ACCESS_COARSE_LOCATION
+                )
             )
-        )
+        }
+    }
+
+    private fun fetchLocationAndWeather() {
+        val fusedLocationClient: FusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this)
+
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+            ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return
+        }
+
+        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+            if (location != null) {
+                // Successfully got the last known location
+                fetchWeatherByCoords(
+                    location.latitude,
+                    location.longitude,
+                    "Current Location",
+                    findViewById(R.id.tvCityName),
+                    findViewById(R.id.tvTemperature),
+                    findViewById(R.id.tvCondition),
+                    findViewById(R.id.ivWeatherIcon),
+                    findViewById(R.id.progressBar)
+                )
+            } else {
+                // Last location is null, requesting a fresh update
+                Log.d("WeatherApp", "Last location was null, requesting fresh update")
+                fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                    .addOnSuccessListener { freshLocation ->
+                        if (freshLocation != null) {
+                            fetchWeatherByCoords(
+                                freshLocation.latitude,
+                                freshLocation.longitude,
+                                "Current Location",
+                                findViewById(R.id.tvCityName),
+                                findViewById(R.id.tvTemperature),
+                                findViewById(R.id.tvCondition),
+                                findViewById(R.id.ivWeatherIcon),
+                                findViewById(R.id.progressBar)
+                            )
+                        } else {
+                            findViewById<TextView>(R.id.tvCityName).text = "Location unavailable"
+                            Toast.makeText(this, "Could not determine location.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+            }
+        }.addOnFailureListener { e ->
+            Log.e("WeatherApp", "Error fetching location", e)
+            findViewById<TextView>(R.id.tvCityName).text = "Location Error"
+        }
     }
 
     private fun hideKeyboard() {
@@ -169,24 +228,29 @@ class MainActivity : AppCompatActivity() {
         ivIcon: ImageView,
         progress: ProgressBar
     ) {
-        RetrofitClient.instance.getWeatherDataByCoords(lat, lon, apiKey)
+        progress.visibility = View.VISIBLE
+        RetrofitClient.instance.getWeatherDataByCoords(lat, lon, apiKey, "metric")
             .enqueue(object : Callback<WeatherResponse> {
                 override fun onResponse(call: Call<WeatherResponse>, response: Response<WeatherResponse>) {
                     progress.visibility = View.GONE
                     if (response.isSuccessful && response.body() != null) {
                         val weatherData = response.body()!!
-                        tvCity.text = getString(R.string.city_country_format, displayName, weatherData.sys.country)
+                        
+                        // Binding data to UI fields
+                        tvCity.text = weatherData.cityName.ifEmpty { displayName }
                         tvTemp.text = getString(R.string.temp_format, weatherData.mainData.temperature.toInt())
                         
                         val rawCondition = weatherData.weatherDescriptionList.firstOrNull()?.description ?: "clear"
                         tvCond.text = rawCondition.replaceFirstChar { it.uppercase() }
                         updateWeatherIcon(rawCondition, ivIcon)
                     } else {
+                        Log.e("WeatherApp", "Fetch by coords failed: ${response.code()}")
                         tvCity.text = getString(R.string.error_text)
                     }
                 }
 
                 override fun onFailure(call: Call<WeatherResponse>, t: Throwable) {
+                    Log.e("WeatherApp", "Fetch by coords failure", t)
                     progress.visibility = View.GONE
                     tvCity.text = getString(R.string.no_connection)
                 }

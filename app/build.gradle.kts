@@ -47,6 +47,8 @@ dependencies {
 
     // Retrofit core library for making HTTP internet requests
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
-// Gson converter to automatically parse incoming JSON data streams
+    // Gson converter to automatically parse incoming JSON data streams
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+    // Google Play Services Location for GPS tracking
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 }
