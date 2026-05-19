@@ -9,13 +9,33 @@ interface WeatherApiService {
     // This tells Retrofit we want to perform an HTTP GET request to the "weather" path
     @GET("weather")
     fun getWeatherData(
-        // Passes the city name dynamically to the query parameter "q"
         @Query("q") cityName: String,
-
-        // Passes our secure API authentication token key to parameter "appid"
         @Query("appid") apiKey: String,
-
-        // Tells the server to return temperature in Celsius metric instead of Fahrenheit
         @Query("units") units: String = "metric"
-    ): Call<WeatherResponse> // Returns our pre-configured data model blueprint wrapper
+    ): Call<WeatherResponse>
+
+    // Search by coordinates (lat/lon) which is more accurate for results from Geocoding
+    @GET("weather")
+    fun getWeatherDataByCoords(
+        @Query("lat") lat: Double,
+        @Query("lon") lon: Double,
+        @Query("appid") apiKey: String,
+        @Query("units") units: String = "metric"
+    ): Call<WeatherResponse>
+
+    // Geocoding API to resolve names (cities/countries) to coordinates
+    @GET("https://api.openweathermap.org/geo/1.0/direct")
+    fun getGeocoding(
+        @Query("q") query: String,
+        @Query("limit") limit: Int = 1,
+        @Query("appid") apiKey: String
+    ): Call<List<GeocodingResponse>>
 }
+
+data class GeocodingResponse(
+    val name: String,
+    val lat: Double,
+    val lon: Double,
+    val country: String,
+    val state: String? = null
+)

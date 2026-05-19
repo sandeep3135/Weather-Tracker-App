@@ -1,3 +1,11 @@
 <resources>
     <string name="app_name">WeatherTrackerApp</string>
+    <string name="temp_format">%1$d°C</string>
+    <string name="searching">Searching...</string>
+    <string name="error_text">Error</string>
+    <string name="no_connection">No Connection</string>
+    <string name="enter_city">Please enter a city name</string>
+    <string name="city_not_found">City not found. Check spelling.</string>
+    <string name="invalid_api_key">Invalid API Key. Please verify it is active on OpenWeatherMap.org</string>
+    <string name="network_error">Network error. Check connection.</string>
 </resources>
