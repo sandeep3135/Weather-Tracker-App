@@ -11,8 +11,8 @@ import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import org.json.JSONObject
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -20,6 +20,24 @@ import retrofit2.Response
 class MainActivity : AppCompatActivity() {
 
     private val apiKey = "90b07aff560023aa2b1fa6eb5695c91d"
+
+
+    // Registers the system permission dialogue callback
+    private val requestLocationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions: Map<String, Boolean> ->
+        val fineLocationGranted: Boolean = permissions[android.Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        val coarseLocationGranted: Boolean = permissions[android.Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+
+        if (fineLocationGranted || coarseLocationGranted) {
+            // ⭐ Success: Hardware sensors unlocked!
+            Toast.makeText(this, "Location permission granted. Fetching local coordinates...", Toast.LENGTH_SHORT).show()
+            // TODO: Invoke GPS extraction pipeline function here
+        } else {
+            // 🛑 Denied: Security wall active
+            Toast.makeText(this, "Permission denied. Please search your city manually.", Toast.LENGTH_LONG).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,6 +67,14 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, getString(R.string.enter_city), Toast.LENGTH_SHORT).show()
             }
         }
+
+        // Trigger runtime permission check sequence automatically on launch
+        requestLocationPermissionLauncher.launch(
+            arrayOf(
+                android.Manifest.permission.ACCESS_FINE_LOCATION,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+        )
     }
 
     private fun hideKeyboard() {
@@ -75,58 +101,63 @@ class MainActivity : AppCompatActivity() {
             .enqueue(object : Callback<WeatherResponse> {
                 override fun onResponse(call: Call<WeatherResponse>, response: Response<WeatherResponse>) {
                     progress.visibility = View.GONE
-                    if (response.isSuccessful && response.body() != null) {
-                        val weatherData = response.body()!!
-                        
-                        // We use the exact name from the response. If the user searched for "Pakistan", 
-                        // the API usually returns "Pakistan" in weatherData.cityName.
-                        tvCity.text = getString(R.string.city_country_format, weatherData.cityName, weatherData.sys.country)
-                        tvTemp.text = getString(R.string.temp_format, weatherData.mainData.temperature.toInt())
-                        
-                        val rawCondition = weatherData.weatherDescriptionList.firstOrNull()?.description ?: "clear"
-                        tvCond.text = rawCondition.replaceFirstChar { it.uppercase() }
-                        updateWeatherIcon(rawCondition, ivIcon)
+                        if (response.isSuccessful && response.body() != null) {
+                            val weatherData = response.body()!!
+                            
+                            // We use the exact name from the response. If the user searched for "Pakistan", 
+                            // the API usually returns "Pakistan" in weatherData.cityName.
+                            tvCity.text = getString(R.string.city_country_format, weatherData.cityName, weatherData.sys.country)
+                            tvTemp.text = getString(R.string.temp_format, weatherData.mainData.temperature.toInt())
+                            
+                            val rawCondition = weatherData.weatherDescriptionList.firstOrNull()?.description ?: "clear"
+                            tvCond.text = rawCondition.replaceFirstChar { it.uppercase() }
+                            updateWeatherIcon(rawCondition, ivIcon)
+                        } else {
+                            Log.e("WeatherApp", "Direct search failed: ${response.code()} ${response.message()}")
+                            // If direct search fails, it might be a specific city that needs geocoding resolution
+                            handleErrorWithGeocoding(query, tvCity, tvTemp, tvCond, ivIcon, progress)
+                        }
+                    }
+
+                    override fun onFailure(call: Call<WeatherResponse>, t: Throwable) {
+                        Log.e("WeatherApp", "Direct search failure", t)
+                        progress.visibility = View.GONE
+                        tvCity.text = getString(R.string.no_connection)
+                    }
+                })
+        }
+
+        private fun handleErrorWithGeocoding(
+            query: String,
+            tvCity: TextView,
+            tvTemp: TextView,
+            tvCond: TextView,
+            ivIcon: ImageView,
+            progress: ProgressBar
+        ) {
+            progress.visibility = View.VISIBLE
+            RetrofitClient.instance.getGeocoding(query, 1, apiKey).enqueue(object : Callback<List<GeocodingResponse>> {
+                override fun onResponse(call: Call<List<GeocodingResponse>>, response: Response<List<GeocodingResponse>>) {
+                    val results = response.body()
+                    if (response.isSuccessful && !results.isNullOrEmpty()) {
+                        val location = results[0]
+                        Log.d("WeatherApp", "Geocoding success: ${location.name}, ${location.lat}, ${location.lon}")
+                        fetchWeatherByCoords(location.lat, location.lon, location.name, tvCity, tvTemp, tvCond, ivIcon, progress)
                     } else {
-                        // If direct search fails, it might be a specific city that needs geocoding resolution
-                        handleErrorWithGeocoding(query, tvCity, tvTemp, tvCond, ivIcon, progress)
+                        Log.e("WeatherApp", "Geocoding failed or empty: ${response.code()} ${response.message()}")
+                        progress.visibility = View.GONE
+                        tvCity.text = getString(R.string.error_text)
+                        Toast.makeText(this@MainActivity, getString(R.string.city_not_found), Toast.LENGTH_SHORT).show()
                     }
                 }
 
-                override fun onFailure(call: Call<WeatherResponse>, t: Throwable) {
+                override fun onFailure(call: Call<List<GeocodingResponse>>, t: Throwable) {
+                    Log.e("WeatherApp", "Geocoding failure", t)
                     progress.visibility = View.GONE
                     tvCity.text = getString(R.string.no_connection)
                 }
             })
-    }
-
-    private fun handleErrorWithGeocoding(
-        query: String,
-        tvCity: TextView,
-        tvTemp: TextView,
-        tvCond: TextView,
-        ivIcon: ImageView,
-        progress: ProgressBar
-    ) {
-        progress.visibility = View.VISIBLE
-        RetrofitClient.instance.getGeocoding(query, 1, apiKey).enqueue(object : Callback<List<GeocodingResponse>> {
-            override fun onResponse(call: Call<List<GeocodingResponse>>, response: Response<List<GeocodingResponse>>) {
-                val results = response.body()
-                if (response.isSuccessful && !results.isNullOrEmpty()) {
-                    val location = results[0]
-                    fetchWeatherByCoords(location.lat, location.lon, location.name, tvCity, tvTemp, tvCond, ivIcon, progress)
-                } else {
-                    progress.visibility = View.GONE
-                    tvCity.text = getString(R.string.error_text)
-                    Toast.makeText(this@MainActivity, getString(R.string.city_not_found), Toast.LENGTH_SHORT).show()
-                }
-            }
-
-            override fun onFailure(call: Call<List<GeocodingResponse>>, t: Throwable) {
-                progress.visibility = View.GONE
-                tvCity.text = getString(R.string.no_connection)
-            }
-        })
-    }
+        }
 
     private fun fetchWeatherByCoords(
         lat: Double,
