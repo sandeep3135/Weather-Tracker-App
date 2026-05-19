@@ -1,8 +1,10 @@
 package com.example.weathertrackerapp
 
+import android.content.Context
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
@@ -17,14 +19,11 @@ import retrofit2.Response
 
 class MainActivity : AppCompatActivity() {
 
-    // IMPORTANT: OpenWeatherMap keys are 32 characters. Ensure yours is active.
     private val apiKey = "90b07aff560023aa2b1fa6eb5695c91d"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        
-        Log.d("WeatherApp", "MainActivity started. Using API Key: $apiKey")
 
         val etCitySearch: EditText = findViewById(R.id.etCitySearch)
         val btnSearch: ImageButton = findViewById(R.id.btnSearch)
@@ -37,20 +36,30 @@ class MainActivity : AppCompatActivity() {
         btnSearch.setOnClickListener {
             val query = etCitySearch.text.toString().trim()
             if (query.isNotEmpty()) {
-                // Clear old data while searching
+                hideKeyboard()
+                etCitySearch.text.clear()
+                etCitySearch.clearFocus()
+
                 tvCityName.text = getString(R.string.searching)
                 tvTemperature.text = "--°C"
                 tvCondition.text = ""
                 
-                Log.d("WeatherApp", "Searching for: '$query'")
-                searchAndFetchWeather(query, tvCityName, tvTemperature, tvCondition, ivWeatherIcon, progressBar)
+                fetchWeather(query, tvCityName, tvTemperature, tvCondition, ivIcon = ivWeatherIcon, progress = progressBar)
             } else {
                 Toast.makeText(this, getString(R.string.enter_city), Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    private fun searchAndFetchWeather(
+    private fun hideKeyboard() {
+        val view = this.currentFocus
+        if (view != null) {
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.hideSoftInputFromWindow(view.windowToken, 0)
+        }
+    }
+
+    private fun fetchWeather(
         query: String,
         tvCity: TextView,
         tvTemp: TextView,
@@ -60,30 +69,61 @@ class MainActivity : AppCompatActivity() {
     ) {
         progress.visibility = View.VISIBLE
 
-        // Step 1: Use Geocoding API to resolve the search query (city or country) to coordinates.
-        // This fixes the issue where searching for "India" returned "Innichen" by resolving
-        // the name to a specific location (lat/lon) first.
+        // Use direct search first because OpenWeatherMap's /weather endpoint
+        // handles names exactly as users type them (e.g., "Pakistan" returns "Pakistan").
+        RetrofitClient.instance.getWeatherData(query, apiKey, "metric")
+            .enqueue(object : Callback<WeatherResponse> {
+                override fun onResponse(call: Call<WeatherResponse>, response: Response<WeatherResponse>) {
+                    progress.visibility = View.GONE
+                    if (response.isSuccessful && response.body() != null) {
+                        val weatherData = response.body()!!
+                        
+                        // We use the exact name from the response. If the user searched for "Pakistan", 
+                        // the API usually returns "Pakistan" in weatherData.cityName.
+                        tvCity.text = getString(R.string.city_country_format, weatherData.cityName, weatherData.sys.country)
+                        tvTemp.text = getString(R.string.temp_format, weatherData.mainData.temperature.toInt())
+                        
+                        val rawCondition = weatherData.weatherDescriptionList.firstOrNull()?.description ?: "clear"
+                        tvCond.text = rawCondition.replaceFirstChar { it.uppercase() }
+                        updateWeatherIcon(rawCondition, ivIcon)
+                    } else {
+                        // If direct search fails, it might be a specific city that needs geocoding resolution
+                        handleErrorWithGeocoding(query, tvCity, tvTemp, tvCond, ivIcon, progress)
+                    }
+                }
+
+                override fun onFailure(call: Call<WeatherResponse>, t: Throwable) {
+                    progress.visibility = View.GONE
+                    tvCity.text = getString(R.string.no_connection)
+                }
+            })
+    }
+
+    private fun handleErrorWithGeocoding(
+        query: String,
+        tvCity: TextView,
+        tvTemp: TextView,
+        tvCond: TextView,
+        ivIcon: ImageView,
+        progress: ProgressBar
+    ) {
+        progress.visibility = View.VISIBLE
         RetrofitClient.instance.getGeocoding(query, 1, apiKey).enqueue(object : Callback<List<GeocodingResponse>> {
             override fun onResponse(call: Call<List<GeocodingResponse>>, response: Response<List<GeocodingResponse>>) {
-                val geocodingResults = response.body()
-                if (response.isSuccessful && !geocodingResults.isNullOrEmpty()) {
-                    val location = geocodingResults[0]
-                    Log.d("WeatherApp", "Geocoding success: Found ${location.name}, ${location.country}")
-                    
-                    // Step 2: Fetch weather using the precise coordinates
+                val results = response.body()
+                if (response.isSuccessful && !results.isNullOrEmpty()) {
+                    val location = results[0]
                     fetchWeatherByCoords(location.lat, location.lon, location.name, tvCity, tvTemp, tvCond, ivIcon, progress)
                 } else {
-                    Log.e("WeatherApp", "Geocoding failed or no results. Falling back to direct search.")
-                    // Fallback to direct search if geocoding yields nothing
-                    fetchWeatherDataDirectly(query, tvCity, tvTemp, tvCond, ivIcon, progress)
+                    progress.visibility = View.GONE
+                    tvCity.text = getString(R.string.error_text)
+                    Toast.makeText(this@MainActivity, getString(R.string.city_not_found), Toast.LENGTH_SHORT).show()
                 }
             }
 
             override fun onFailure(call: Call<List<GeocodingResponse>>, t: Throwable) {
                 progress.visibility = View.GONE
-                Log.e("WeatherApp", "Geocoding Network Failure: ${t.message}")
                 tvCity.text = getString(R.string.no_connection)
-                Toast.makeText(this@MainActivity, getString(R.string.network_error), Toast.LENGTH_SHORT).show()
             }
         })
     }
@@ -98,62 +138,26 @@ class MainActivity : AppCompatActivity() {
         ivIcon: ImageView,
         progress: ProgressBar
     ) {
-        RetrofitClient.instance.getWeatherDataByCoords(lat, lon, apiKey, "metric")
+        RetrofitClient.instance.getWeatherDataByCoords(lat, lon, apiKey)
             .enqueue(object : Callback<WeatherResponse> {
                 override fun onResponse(call: Call<WeatherResponse>, response: Response<WeatherResponse>) {
                     progress.visibility = View.GONE
-                    
                     if (response.isSuccessful && response.body() != null) {
                         val weatherData = response.body()!!
-                        // Use the display name from geocoding (e.g., "India") instead of the API's default city name
-                        tvCity.text = displayName
+                        tvCity.text = getString(R.string.city_country_format, displayName, weatherData.sys.country)
                         tvTemp.text = getString(R.string.temp_format, weatherData.mainData.temperature.toInt())
                         
                         val rawCondition = weatherData.weatherDescriptionList.firstOrNull()?.description ?: "clear"
                         tvCond.text = rawCondition.replaceFirstChar { it.uppercase() }
-
                         updateWeatherIcon(rawCondition, ivIcon)
                     } else {
-                        handleErrorResponse(response, tvCity)
+                        tvCity.text = getString(R.string.error_text)
                     }
                 }
 
                 override fun onFailure(call: Call<WeatherResponse>, t: Throwable) {
                     progress.visibility = View.GONE
                     tvCity.text = getString(R.string.no_connection)
-                    Toast.makeText(this@MainActivity, getString(R.string.network_error), Toast.LENGTH_SHORT).show()
-                }
-            })
-    }
-
-    private fun fetchWeatherDataDirectly(
-        city: String,
-        tvCity: TextView,
-        tvTemp: TextView,
-        tvCond: TextView,
-        ivIcon: ImageView,
-        progress: ProgressBar
-    ) {
-        RetrofitClient.instance.getWeatherData(city, apiKey, "metric")
-            .enqueue(object : Callback<WeatherResponse> {
-                override fun onResponse(call: Call<WeatherResponse>, response: Response<WeatherResponse>) {
-                    progress.visibility = View.GONE
-                    if (response.isSuccessful && response.body() != null) {
-                        val weatherData = response.body()!!
-                        tvCity.text = weatherData.cityName
-                        tvTemp.text = getString(R.string.temp_format, weatherData.mainData.temperature.toInt())
-                        val rawCondition = weatherData.weatherDescriptionList.firstOrNull()?.description ?: "clear"
-                        tvCond.text = rawCondition.replaceFirstChar { it.uppercase() }
-                        updateWeatherIcon(rawCondition, ivIcon)
-                    } else {
-                        handleErrorResponse(response, tvCity)
-                    }
-                }
-
-                override fun onFailure(call: Call<WeatherResponse>, t: Throwable) {
-                    progress.visibility = View.GONE
-                    tvCity.text = getString(R.string.no_connection)
-                    Toast.makeText(this@MainActivity, getString(R.string.network_error), Toast.LENGTH_SHORT).show()
                 }
             })
     }
@@ -165,25 +169,5 @@ class MainActivity : AppCompatActivity() {
             condition.contains("haze", ignoreCase = true) || condition.contains("mist", ignoreCase = true) -> ivIcon.setImageResource(R.drawable.ic_weather_haze)
             else -> ivIcon.setImageResource(R.drawable.ic_weather_sunny)
         }
-    }
-
-    private fun handleErrorResponse(response: Response<WeatherResponse>, tvCity: TextView) {
-        val errorBody = response.errorBody()?.string()
-        val serverMessage = try {
-            errorBody?.let { JSONObject(it).getString("message") } ?: "Unknown error"
-        } catch (e: Exception) {
-            "Request failed"
-        }
-        
-        Log.e("WeatherApp", "Server Error: $serverMessage (Code: ${response.code()})")
-        
-        val displayMessage = when (response.code()) {
-            401 -> getString(R.string.invalid_api_key)
-            404 -> getString(R.string.city_not_found)
-            else -> serverMessage.replaceFirstChar { it.uppercase() }
-        }
-        
-        tvCity.text = getString(R.string.error_text)
-        Toast.makeText(this@MainActivity, displayMessage, Toast.LENGTH_LONG).show()
     }
 }
