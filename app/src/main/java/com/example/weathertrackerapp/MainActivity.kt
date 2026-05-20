@@ -1,40 +1,43 @@
 package com.example.weathertrackerapp
 
+import android.annotation.SuppressLint
 import android.Manifest
-import android.content.Context
 import android.content.pm.PackageManager
+import android.location.Geocoder
 import android.os.Bundle
-import android.util.Log
+import android.os.Looper
 import android.view.View
 import android.view.inputmethod.InputMethodManager
-import android.widget.EditText
-import android.widget.ImageButton
-import android.widget.ImageView
-import android.widget.ProgressBar
-import android.widget.TextView
-import android.widget.Toast
+import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
+import androidx.recyclerview.widget.RecyclerView
+import com.google.android.gms.location.*
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+import java.text.SimpleDateFormat
+import java.util.*
 
 class MainActivity : AppCompatActivity() {
 
     private val apiKey = "90b07aff560023aa2b1fa6eb5695c91d"
-
+    private val PREFS_NAME = "WeatherPrefs"
+    private val KEY_HOME_CITY = "home_city"
 
     // Registers the system permission dialogue callback
     private val requestLocationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions: Map<String, Boolean> ->
-        val fineLocationGranted = permissions[android.Manifest.permission.ACCESS_FINE_LOCATION] ?: false
-        val coarseLocationGranted = permissions[android.Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+        val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
 
         if (fineLocationGranted || coarseLocationGranted) {
             Toast.makeText(this, "Permission granted. Fetching weather...", Toast.LENGTH_SHORT).show()
@@ -44,44 +47,52 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private lateinit var tvCityName: TextView
+    private lateinit var tvChooseArea: TextView
+    private lateinit var tvTemperature: TextView
+    private lateinit var tvConditionText: TextView
+    private lateinit var tvHumidity: TextView
+    private lateinit var tvWind: TextView
+    private lateinit var tvDateTimeLabel: TextView
+    private lateinit var ivWeatherIcon: ImageView
+    private lateinit var progressBar: ProgressBar
+    private lateinit var rvWeeklyForecast: RecyclerView
+    private lateinit var forecastAdapter: ForecastAdapter
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        val etCitySearch: EditText = findViewById(R.id.etCitySearch)
-        val btnSearch: ImageButton = findViewById(R.id.btnSearch)
-        val tvCityName: TextView = findViewById(R.id.tvCityName)
-        val tvTemperature: TextView = findViewById(R.id.tvTemperature)
-        val tvCondition: TextView = findViewById(R.id.tvCondition)
-        val progressBar: ProgressBar = findViewById(R.id.progressBar)
-        val ivWeatherIcon: ImageView = findViewById(R.id.ivWeatherIcon)
+        // Initialize Views
+        tvCityName = findViewById(R.id.tvCityName)
+        tvChooseArea = findViewById(R.id.tvChooseArea)
+        tvTemperature = findViewById(R.id.tvTemperature)
+        tvConditionText = findViewById(R.id.tvConditionText)
+        tvHumidity = findViewById(R.id.tvHumidity)
+        tvWind = findViewById(R.id.tvWind)
+        tvDateTimeLabel = findViewById(R.id.tvDateTimeLabel)
+        ivWeatherIcon = findViewById(R.id.ivWeatherIcon)
+        progressBar = findViewById(R.id.progressBar)
+        rvWeeklyForecast = findViewById(R.id.rvWeeklyForecast)
 
-        btnSearch.setOnClickListener {
-            val query = etCitySearch.text.toString().trim()
-            if (query.isNotEmpty()) {
-                hideKeyboard()
-                etCitySearch.text.clear()
-                etCitySearch.clearFocus()
+        // Setup RecyclerView
+        forecastAdapter = ForecastAdapter(emptyList())
+        rvWeeklyForecast.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this, androidx.recyclerview.widget.LinearLayoutManager.HORIZONTAL, false)
+        rvWeeklyForecast.adapter = forecastAdapter
 
-                tvCityName.text = getString(R.string.searching)
-                tvTemperature.text = "--°C"
-                tvCondition.text = ""
-                
-                fetchWeather(query, tvCityName, tvTemperature, tvCondition, ivIcon = ivWeatherIcon, progress = progressBar)
-            } else {
-                Toast.makeText(this, getString(R.string.enter_city), Toast.LENGTH_SHORT).show()
-            }
+        tvChooseArea.setOnClickListener {
+            showChooseAreaDialog()
         }
 
-        // Check if permissions are already granted to avoid unnecessary popup refresh
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+        // Check if permissions are already granted
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             fetchLocationAndWeather()
         } else {
             requestLocationPermissionLauncher.launch(
                 arrayOf(
-                    android.Manifest.permission.ACCESS_FINE_LOCATION,
-                    android.Manifest.permission.ACCESS_COARSE_LOCATION
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
                 )
             )
         }
@@ -95,166 +106,284 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        tvCityName.text = getString(R.string.searching)
+        progressBar.visibility = View.VISIBLE
+
+        // Step 1: Try for a fast "Last Known Location"
         fusedLocationClient.lastLocation.addOnSuccessListener { location ->
             if (location != null) {
-                // Successfully got the last known location
-                fetchWeatherByCoords(
-                    location.latitude,
-                    location.longitude,
-                    "Current Location",
-                    findViewById(R.id.tvCityName),
-                    findViewById(R.id.tvTemperature),
-                    findViewById(R.id.tvCondition),
-                    findViewById(R.id.ivWeatherIcon),
-                    findViewById(R.id.progressBar)
-                )
+                fetchWeatherByCoords(location.latitude, location.longitude, "Current Location")
             } else {
-                // Last location is null, requesting a fresh update
-                Log.d("WeatherApp", "Last location was null, requesting fresh update")
-                fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
-                    .addOnSuccessListener { freshLocation ->
-                        if (freshLocation != null) {
-                            fetchWeatherByCoords(
-                                freshLocation.latitude,
-                                freshLocation.longitude,
-                                "Current Location",
-                                findViewById(R.id.tvCityName),
-                                findViewById(R.id.tvTemperature),
-                                findViewById(R.id.tvCondition),
-                                findViewById(R.id.ivWeatherIcon),
-                                findViewById(R.id.progressBar)
-                            )
-                        } else {
-                            findViewById<TextView>(R.id.tvCityName).text = "Location unavailable"
-                            Toast.makeText(this, "Could not determine location.", Toast.LENGTH_SHORT).show()
-                        }
-                    }
+                attemptFreshLocation(fusedLocationClient)
             }
-        }.addOnFailureListener { e ->
-            Log.e("WeatherApp", "Error fetching location", e)
-            findViewById<TextView>(R.id.tvCityName).text = "Location Error"
+        }.addOnFailureListener {
+            attemptFreshLocation(fusedLocationClient)
         }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun attemptFreshLocation(fusedLocationClient: FusedLocationProviderClient) {
+        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+            .addOnSuccessListener { location ->
+                if (location != null) {
+                    fetchWeatherByCoords(location.latitude, location.longitude, "Current Location")
+                } else {
+                    forceLocationUpdate(fusedLocationClient)
+                }
+            }
+            .addOnFailureListener {
+                forceLocationUpdate(fusedLocationClient)
+            }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun forceLocationUpdate(fusedLocationClient: FusedLocationProviderClient) {
+        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000)
+            .setMaxUpdates(1)
+            .build()
+
+        val timeoutHandler = android.os.Handler(Looper.getMainLooper())
+        val timeoutRunnable = Runnable {
+            if (tvCityName.text == getString(R.string.searching)) {
+                Toast.makeText(this, "GPS timeout. Showing default station.", Toast.LENGTH_SHORT).show()
+                fetchWeather("New York")
+            }
+        }
+        timeoutHandler.postDelayed(timeoutRunnable, 10000)
+
+        fusedLocationClient.requestLocationUpdates(locationRequest, object : LocationCallback() {
+            override fun onLocationResult(locationResult: LocationResult) {
+                timeoutHandler.removeCallbacks(timeoutRunnable)
+                val freshLocation = locationResult.lastLocation
+                if (freshLocation != null) {
+                    fetchWeatherByCoords(freshLocation.latitude, freshLocation.longitude, "Current Location")
+                } else {
+                    fetchWeather("New York")
+                }
+            }
+        }, Looper.getMainLooper())
+    }
+
+    private fun fetchWeatherByCoords(lat: Double, lon: Double, displayName: String) {
+        progressBar.visibility = View.VISIBLE
+
+        var finalCityName = displayName
+        try {
+            val geocoder = Geocoder(this, Locale.getDefault())
+            @Suppress("DEPRECATION")
+            val addresses = geocoder.getFromLocation(lat, lon, 1)
+            if (!addresses.isNullOrEmpty()) {
+                val city = addresses[0].locality ?: addresses[0].subAdminArea ?: addresses[0].adminArea
+                if (city != null) finalCityName = city
+            }
+        } catch (_: Exception) {
+            // Fallback to displayName if Geocoder fails
+        }
+
+        RetrofitClient.instance.getWeatherDataByCoords(lat, lon, apiKey, "metric")
+            .enqueue(object : Callback<WeatherResponse> {
+                override fun onResponse(call: Call<WeatherResponse>, response: Response<WeatherResponse>) {
+                    progressBar.visibility = View.GONE
+                    if (response.isSuccessful && response.body() != null) {
+                        displayWeatherData(response.body()!!, finalCityName, displayName)
+                        fetchForecast(lat, lon)
+                    } else {
+                        tvCityName.text = getString(R.string.error_text)
+                    }
+                }
+
+                override fun onFailure(call: Call<WeatherResponse>, t: Throwable) {
+                    progressBar.visibility = View.GONE
+                    tvCityName.text = getString(R.string.no_connection)
+                }
+            })
+    }
+
+    private fun displayWeatherData(weatherData: WeatherResponse, finalCityName: String, displayName: String) {
+        // City Name
+        val cityName = if (finalCityName == displayName) {
+            weatherData.cityName ?: displayName
+        } else {
+            finalCityName
+        }
+        val country = weatherData.sys?.country
+        tvCityName.text = if (!country.isNullOrEmpty()) getString(R.string.city_country_format, cityName, country) else cityName
+
+        // Temperature
+        val temp = weatherData.mainData?.temperature?.toInt()
+        tvTemperature.text = temp?.toString() ?: "--"
+
+        // Condition
+        val rawCondition = weatherData.weatherDescriptionList?.firstOrNull()?.description ?: "clear"
+        tvConditionText.text = rawCondition.replaceFirstChar { it.uppercase() }
+        updateWeatherIcon(rawCondition, ivWeatherIcon)
+
+        // Metrics
+        tvHumidity.text = getString(R.string.humidity_format, weatherData.mainData?.humidity ?: 0)
+        tvWind.text = getString(R.string.wind_format, weatherData.wind?.speed?.toInt() ?: 0)
+        
+        // Date Time
+        tvDateTimeLabel.text = SimpleDateFormat("EEEE, h:mm a", Locale.getDefault()).format(Date())
     }
 
     private fun hideKeyboard() {
         val view = this.currentFocus
         if (view != null) {
-            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
             imm.hideSoftInputFromWindow(view.windowToken, 0)
         }
     }
 
-    private fun fetchWeather(
-        query: String,
-        tvCity: TextView,
-        tvTemp: TextView,
-        tvCond: TextView,
-        ivIcon: ImageView,
-        progress: ProgressBar
-    ) {
-        progress.visibility = View.VISIBLE
+    private fun fetchWeather(query: String) {
+        progressBar.visibility = View.VISIBLE
 
-        // Use direct search first because OpenWeatherMap's /weather endpoint
-        // handles names exactly as users type them (e.g., "Pakistan" returns "Pakistan").
         RetrofitClient.instance.getWeatherData(query, apiKey, "metric")
             .enqueue(object : Callback<WeatherResponse> {
                 override fun onResponse(call: Call<WeatherResponse>, response: Response<WeatherResponse>) {
-                    progress.visibility = View.GONE
-                        if (response.isSuccessful && response.body() != null) {
-                            val weatherData = response.body()!!
-                            
-                            // We use the exact name from the response. If the user searched for "Pakistan", 
-                            // the API usually returns "Pakistan" in weatherData.cityName.
-                            tvCity.text = getString(R.string.city_country_format, weatherData.cityName, weatherData.sys.country)
-                            tvTemp.text = getString(R.string.temp_format, weatherData.mainData.temperature.toInt())
-                            
-                            val rawCondition = weatherData.weatherDescriptionList.firstOrNull()?.description ?: "clear"
-                            tvCond.text = rawCondition.replaceFirstChar { it.uppercase() }
-                            updateWeatherIcon(rawCondition, ivIcon)
-                        } else {
-                            Log.e("WeatherApp", "Direct search failed: ${response.code()} ${response.message()}")
-                            // If direct search fails, it might be a specific city that needs geocoding resolution
-                            handleErrorWithGeocoding(query, tvCity, tvTemp, tvCond, ivIcon, progress)
-                        }
-                    }
-
-                    override fun onFailure(call: Call<WeatherResponse>, t: Throwable) {
-                        Log.e("WeatherApp", "Direct search failure", t)
-                        progress.visibility = View.GONE
-                        tvCity.text = getString(R.string.no_connection)
-                    }
-                })
-        }
-
-        private fun handleErrorWithGeocoding(
-            query: String,
-            tvCity: TextView,
-            tvTemp: TextView,
-            tvCond: TextView,
-            ivIcon: ImageView,
-            progress: ProgressBar
-        ) {
-            progress.visibility = View.VISIBLE
-            RetrofitClient.instance.getGeocoding(query, 1, apiKey).enqueue(object : Callback<List<GeocodingResponse>> {
-                override fun onResponse(call: Call<List<GeocodingResponse>>, response: Response<List<GeocodingResponse>>) {
-                    val results = response.body()
-                    if (response.isSuccessful && !results.isNullOrEmpty()) {
-                        val location = results[0]
-                        Log.d("WeatherApp", "Geocoding success: ${location.name}, ${location.lat}, ${location.lon}")
-                        fetchWeatherByCoords(location.lat, location.lon, location.name, tvCity, tvTemp, tvCond, ivIcon, progress)
-                    } else {
-                        Log.e("WeatherApp", "Geocoding failed or empty: ${response.code()} ${response.message()}")
-                        progress.visibility = View.GONE
-                        tvCity.text = getString(R.string.error_text)
-                        Toast.makeText(this@MainActivity, getString(R.string.city_not_found), Toast.LENGTH_SHORT).show()
-                    }
-                }
-
-                override fun onFailure(call: Call<List<GeocodingResponse>>, t: Throwable) {
-                    Log.e("WeatherApp", "Geocoding failure", t)
-                    progress.visibility = View.GONE
-                    tvCity.text = getString(R.string.no_connection)
-                }
-            })
-        }
-
-    private fun fetchWeatherByCoords(
-        lat: Double,
-        lon: Double,
-        displayName: String,
-        tvCity: TextView,
-        tvTemp: TextView,
-        tvCond: TextView,
-        ivIcon: ImageView,
-        progress: ProgressBar
-    ) {
-        progress.visibility = View.VISIBLE
-        RetrofitClient.instance.getWeatherDataByCoords(lat, lon, apiKey, "metric")
-            .enqueue(object : Callback<WeatherResponse> {
-                override fun onResponse(call: Call<WeatherResponse>, response: Response<WeatherResponse>) {
-                    progress.visibility = View.GONE
                     if (response.isSuccessful && response.body() != null) {
-                        val weatherData = response.body()!!
+                        progressBar.visibility = View.GONE
+                        val data = response.body()!!
+                        displayWeatherData(data, data.cityName ?: query, query)
                         
-                        // Binding data to UI fields
-                        tvCity.text = weatherData.cityName.ifEmpty { displayName }
-                        tvTemp.text = getString(R.string.temp_format, weatherData.mainData.temperature.toInt())
-                        
-                        val rawCondition = weatherData.weatherDescriptionList.firstOrNull()?.description ?: "clear"
-                        tvCond.text = rawCondition.replaceFirstChar { it.uppercase() }
-                        updateWeatherIcon(rawCondition, ivIcon)
+                        data.coord?.let {
+                            fetchForecast(it.lat, it.lon)
+                        }
                     } else {
-                        Log.e("WeatherApp", "Fetch by coords failed: ${response.code()}")
-                        tvCity.text = getString(R.string.error_text)
+                        handleErrorWithGeocoding(query)
                     }
                 }
 
                 override fun onFailure(call: Call<WeatherResponse>, t: Throwable) {
-                    Log.e("WeatherApp", "Fetch by coords failure", t)
-                    progress.visibility = View.GONE
-                    tvCity.text = getString(R.string.no_connection)
+                    progressBar.visibility = View.GONE
+                    tvCityName.text = getString(R.string.no_connection)
                 }
             })
+    }
+
+    private fun handleErrorWithGeocoding(query: String) {
+        RetrofitClient.instance.getGeocoding(query, 1, apiKey).enqueue(object : Callback<List<GeocodingResponse>> {
+            override fun onResponse(call: Call<List<GeocodingResponse>>, response: Response<List<GeocodingResponse>>) {
+                val results = response.body()
+                if (response.isSuccessful && !results.isNullOrEmpty()) {
+                    val location = results[0]
+                    fetchWeatherByCoords(location.lat, location.lon, location.name)
+                } else {
+                    progressBar.visibility = View.GONE
+                    tvCityName.text = getString(R.string.error_text)
+                    Toast.makeText(this@MainActivity, getString(R.string.city_not_found), Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onFailure(call: Call<List<GeocodingResponse>>, t: Throwable) {
+                progressBar.visibility = View.GONE
+                tvCityName.text = getString(R.string.no_connection)
+            }
+        })
+    }
+
+    private fun fetchForecast(lat: Double, lon: Double) {
+        RetrofitClient.instance.getForecastData(lat, lon, apiKey, "metric")
+            .enqueue(object : Callback<ForecastResponse> {
+                override fun onResponse(call: Call<ForecastResponse>, response: Response<ForecastResponse>) {
+                    if (response.isSuccessful && response.body() != null) {
+                        val allForecast = response.body()!!.list
+                        // Filter to get one forecast per day (e.g., around 12:00 PM)
+                        val dailyForecast = allForecast.filter { it.dtTxt.contains("12:00:00") }
+                        forecastAdapter.updateData(dailyForecast)
+                    }
+                }
+
+                override fun onFailure(call: Call<ForecastResponse>, t: Throwable) {
+                    // Fail silently for forecast
+                }
+            })
+    }
+
+    private fun showChooseAreaDialog() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_choose_area, null)
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setView(dialogView)
+            .create()
+
+        val etDialogSearch: EditText = dialogView.findViewById(R.id.etDialogSearch)
+        val btnDialogSearch: ImageButton = dialogView.findViewById(R.id.btnDialogSearch)
+        val ivClose: View = dialogView.findViewById(R.id.ivCloseDialog)
+        val btnPrecise: View = dialogView.findViewById(R.id.btnUsePreciseLocation)
+        val chipGroupPopular: ChipGroup = dialogView.findViewById(R.id.chipGroupPopular)
+        val btnSetHome: MaterialButton = dialogView.findViewById(R.id.btnSetHome)
+
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val savedHome = prefs.getString(KEY_HOME_CITY, null)
+
+        if (savedHome != null) {
+            btnSetHome.text = getString(R.string.home_format, savedHome)
+        } else {
+            btnSetHome.text = getString(R.string.set_current_as_home)
+        }
+
+        ivClose.setOnClickListener { dialog.dismiss() }
+
+        btnDialogSearch.setOnClickListener {
+            val query = etDialogSearch.text.toString().trim()
+            if (query.isNotEmpty()) {
+                dialog.dismiss()
+                fetchWeather(query)
+            }
+        }
+
+        etDialogSearch.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                val query = etDialogSearch.text.toString().trim()
+                if (query.isNotEmpty()) {
+                    dialog.dismiss()
+                    fetchWeather(query)
+                }
+                true
+            } else false
+        }
+
+        btnPrecise.setOnClickListener {
+            dialog.dismiss()
+            fetchLocationAndWeather()
+        }
+
+        btnSetHome.setOnClickListener {
+            val currentHome = prefs.getString(KEY_HOME_CITY, null)
+            if (currentHome != null) {
+                dialog.dismiss()
+                fetchWeather(currentHome)
+            } else {
+                val currentCity = tvCityName.text.toString().split(",")[0].trim()
+                if (currentCity.isNotEmpty() && currentCity != getString(R.string.searching) && currentCity != getString(R.string.error_text)) {
+                    prefs.edit().putString(KEY_HOME_CITY, currentCity).apply()
+                    btnSetHome.text = getString(R.string.home_format, currentCity)
+                    Toast.makeText(this, "Home set to $currentCity", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "Wait for weather to load first", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        btnSetHome.setOnLongClickListener {
+            val currentCity = tvCityName.text.toString().split(",")[0].trim()
+            if (currentCity.isNotEmpty() && currentCity != getString(R.string.searching) && currentCity != getString(R.string.error_text)) {
+                prefs.edit().putString(KEY_HOME_CITY, currentCity).apply()
+                btnSetHome.text = getString(R.string.home_format, currentCity)
+                Toast.makeText(this, "Home updated to $currentCity", Toast.LENGTH_SHORT).show()
+            }
+            true
+        }
+
+        // Handle popular chips
+        for (i in 0 until chipGroupPopular.childCount) {
+            val chip = chipGroupPopular.getChildAt(i) as? Chip
+            chip?.setOnClickListener {
+                dialog.dismiss()
+                fetchWeather(chip.text.toString())
+            }
+        }
+
+        dialog.show()
     }
 
     private fun updateWeatherIcon(condition: String, ivIcon: ImageView) {

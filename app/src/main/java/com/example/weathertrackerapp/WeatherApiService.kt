@@ -30,6 +30,15 @@ interface WeatherApiService {
         @Query("limit") limit: Int = 1,
         @Query("appid") apiKey: String
     ): Call<List<GeocodingResponse>>
+
+    // 5-day/3-hour Forecast API
+    @GET("forecast")
+    fun getForecastData(
+        @Query("lat") lat: Double,
+        @Query("lon") lon: Double,
+        @Query("appid") apiKey: String,
+        @Query("units") units: String = "metric"
+    ): Call<ForecastResponse>
 }
 
 data class GeocodingResponse(

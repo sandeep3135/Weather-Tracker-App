@@ -9,4 +9,8 @@
     <string name="invalid_api_key">Invalid API Key. Please verify it is active on OpenWeatherMap.org</string>
     <string name="network_error">Network error. Check connection.</string>
     <string name="city_country_format">%1$s, %2$s</string>
+    <string name="humidity_format">Humidity: %1$d%%</string>
+    <string name="wind_format">Wind: %1$d km/h</string>
+    <string name="home_format">Home: %1$s</string>
+    <string name="set_current_as_home">Set current as home</string>
 </resources>
