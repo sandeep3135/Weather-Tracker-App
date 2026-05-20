@@ -43,7 +43,10 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Permission granted. Fetching weather...", Toast.LENGTH_SHORT).show()
             fetchLocationAndWeather()
         } else {
-            Toast.makeText(this, "Permission denied. Search manually.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Permission denied. Using home/default.", Toast.LENGTH_LONG).show()
+            val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            val savedHome = prefs.getString(KEY_HOME_CITY, "New York") ?: "New York"
+            fetchWeather(savedHome)
         }
     }
 
@@ -53,6 +56,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvConditionText: TextView
     private lateinit var tvHumidity: TextView
     private lateinit var tvWind: TextView
+    private lateinit var tvPrecipitation: TextView
     private lateinit var tvDateTimeLabel: TextView
     private lateinit var ivWeatherIcon: ImageView
     private lateinit var progressBar: ProgressBar
@@ -70,6 +74,7 @@ class MainActivity : AppCompatActivity() {
         tvConditionText = findViewById(R.id.tvConditionText)
         tvHumidity = findViewById(R.id.tvHumidity)
         tvWind = findViewById(R.id.tvWind)
+        tvPrecipitation = findViewById(R.id.tvPrecipitation)
         tvDateTimeLabel = findViewById(R.id.tvDateTimeLabel)
         ivWeatherIcon = findViewById(R.id.ivWeatherIcon)
         progressBar = findViewById(R.id.progressBar)
@@ -142,11 +147,14 @@ class MainActivity : AppCompatActivity() {
             .setMaxUpdates(1)
             .build()
 
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val savedHome = prefs.getString(KEY_HOME_CITY, "New York") ?: "New York"
+
         val timeoutHandler = android.os.Handler(Looper.getMainLooper())
         val timeoutRunnable = Runnable {
             if (tvCityName.text == getString(R.string.searching)) {
-                Toast.makeText(this, "GPS timeout. Showing default station.", Toast.LENGTH_SHORT).show()
-                fetchWeather("New York")
+                Toast.makeText(this, "GPS timeout. Using home/default.", Toast.LENGTH_SHORT).show()
+                fetchWeather(savedHome)
             }
         }
         timeoutHandler.postDelayed(timeoutRunnable, 10000)
@@ -158,7 +166,7 @@ class MainActivity : AppCompatActivity() {
                 if (freshLocation != null) {
                     fetchWeatherByCoords(freshLocation.latitude, freshLocation.longitude, "Current Location")
                 } else {
-                    fetchWeather("New York")
+                    fetchWeather(savedHome)
                 }
             }
         }, Looper.getMainLooper())
@@ -234,28 +242,31 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun fetchWeather(query: String) {
-        progressBar.visibility = View.VISIBLE
-
-        RetrofitClient.instance.getWeatherData(query, apiKey, "metric")
-            .enqueue(object : Callback<WeatherResponse> {
-                override fun onResponse(call: Call<WeatherResponse>, response: Response<WeatherResponse>) {
+    private fun fetchForecast(lat: Double, lon: Double) {
+        RetrofitClient.instance.getForecastData(lat, lon, apiKey, "metric")
+            .enqueue(object : Callback<ForecastResponse> {
+                override fun onResponse(call: Call<ForecastResponse>, response: Response<ForecastResponse>) {
                     if (response.isSuccessful && response.body() != null) {
-                        progressBar.visibility = View.GONE
-                        val data = response.body()!!
-                        displayWeatherData(data, data.cityName ?: query, query)
-                        
-                        data.coord?.let {
-                            fetchForecast(it.lat, it.lon)
+                        val allForecast = response.body()!!.list
+
+                        // 🏆 BUG FIX: Extract real rain probability from the first forecast entry
+                        val firstForecastItem = allForecast.firstOrNull()
+                        if (firstForecastItem != null) {
+                            // Now that 'pop' exists in your model, this line becomes 100% valid!
+                            val precipProbability = ((firstForecastItem.pop ?: 0.0) * 100).toInt()
+
+                            // Sets the text formatting string directly onto your screen container
+                            tvPrecipitation.text = "Precip: $precipProbability%"
                         }
-                    } else {
-                        handleErrorWithGeocoding(query)
+
+                        // Build your 24-hour timeline view strip
+                        val hourlyTimeline = allForecast.take(8)
+                        forecastAdapter.updateData(hourlyTimeline)
                     }
                 }
 
-                override fun onFailure(call: Call<WeatherResponse>, t: Throwable) {
-                    progressBar.visibility = View.GONE
-                    tvCityName.text = getString(R.string.no_connection)
+                override fun onFailure(call: Call<ForecastResponse>, t: Throwable) {
+                    // Fail silently for forecast
                 }
             })
     }
@@ -281,20 +292,29 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    private fun fetchForecast(lat: Double, lon: Double) {
-        RetrofitClient.instance.getForecastData(lat, lon, apiKey, "metric")
-            .enqueue(object : Callback<ForecastResponse> {
-                override fun onResponse(call: Call<ForecastResponse>, response: Response<ForecastResponse>) {
+    private fun fetchWeather(city: String) {
+        progressBar.visibility = View.VISIBLE
+        RetrofitClient.instance.getWeatherData(city, apiKey, "metric")
+            .enqueue(object : Callback<WeatherResponse> {
+                override fun onResponse(call: Call<WeatherResponse>, response: Response<WeatherResponse>) {
                     if (response.isSuccessful && response.body() != null) {
-                        val allForecast = response.body()!!.list
-                        // Filter to get one forecast per day (e.g., around 12:00 PM)
-                        val dailyForecast = allForecast.filter { it.dtTxt.contains("12:00:00") }
-                        forecastAdapter.updateData(dailyForecast)
+                        progressBar.visibility = View.GONE
+                        val weatherData = response.body()!!
+                        displayWeatherData(weatherData, weatherData.cityName ?: city, city)
+                        val lat = weatherData.coord?.lat
+                        val lon = weatherData.coord?.lon
+                        if (lat != null && lon != null) {
+                            fetchForecast(lat, lon)
+                        }
+                    } else {
+                        // If direct search fails, try geocoding as fallback
+                        handleErrorWithGeocoding(city)
                     }
                 }
 
-                override fun onFailure(call: Call<ForecastResponse>, t: Throwable) {
-                    // Fail silently for forecast
+                override fun onFailure(call: Call<WeatherResponse>, t: Throwable) {
+                    progressBar.visibility = View.GONE
+                    tvCityName.text = getString(R.string.no_connection)
                 }
             })
     }

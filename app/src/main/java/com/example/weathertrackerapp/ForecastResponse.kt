@@ -10,5 +10,6 @@ data class ForecastItem(
     @SerializedName("dt") val dt: Long,
     @SerializedName("main") val main: Main,
     @SerializedName("weather") val weather: List<Weather>,
-    @SerializedName("dt_txt") val dtTxt: String
+    @SerializedName("dt_txt") val dtTxt: String,
+    @SerializedName("pop") val pop: Double?
 )

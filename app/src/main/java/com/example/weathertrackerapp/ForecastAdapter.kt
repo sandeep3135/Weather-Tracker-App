@@ -25,18 +25,37 @@ class ForecastAdapter(private var forecastList: List<ForecastItem>) :
 
     override fun onBindViewHolder(holder: ForecastViewHolder, position: Int) {
         val item = forecastList[position]
-        
-        // Format day (e.g., "Wed")
-        val date = Date(item.dt * 1000L)
-        val sdf = SimpleDateFormat("EEE", Locale.getDefault())
-        holder.tvDay.text = sdf.format(date)
-        
-        // Temp
+
+        // 1. Smart Timeline Labels
+        if (position == 0) {
+            holder.tvDay.text = "Now"
+        } else {
+            val date = Date(item.dt * 1000L)
+            val sdf = SimpleDateFormat("h a", Locale.getDefault())
+            holder.tvDay.text = sdf.format(date)
+        }
+
+        // 2. Exact Temperature
         holder.tvTemp.text = "${item.main.temperature?.toInt() ?: 0}°"
-        
-        // Icon
-        val condition = item.weather.firstOrNull()?.description ?: "clear"
-        updateWeatherIcon(condition, holder.ivIcon)
+
+        // 3. Accurate Condition-Icon Mapping per Data Block
+        // Extracting the main condition category directly from the current interval packet
+        val conditionDescription = item.weather.firstOrNull()?.description ?: "clear"
+
+        when {
+            conditionDescription.contains("rain", ignoreCase = true) || conditionDescription.contains("drizzle", ignoreCase = true) -> {
+                holder.ivIcon.setImageResource(R.drawable.ic_weather_rainy)
+            }
+            conditionDescription.contains("cloud", ignoreCase = true) -> {
+                holder.ivIcon.setImageResource(R.drawable.ic_weather_cloudy)
+            }
+            conditionDescription.contains("haze", ignoreCase = true) || conditionDescription.contains("mist", ignoreCase = true) || conditionDescription.contains("fog", ignoreCase = true) -> {
+                holder.ivIcon.setImageResource(R.drawable.ic_weather_haze)
+            }
+            else -> {
+                holder.ivIcon.setImageResource(R.drawable.ic_weather_sunny)
+            }
+        }
     }
 
     override fun getItemCount() = forecastList.size
