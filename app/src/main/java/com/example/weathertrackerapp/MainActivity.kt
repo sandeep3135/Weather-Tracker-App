@@ -40,12 +40,12 @@ class MainActivity : AppCompatActivity() {
         val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
 
         if (fineLocationGranted || coarseLocationGranted) {
-            Toast.makeText(this, "Permission granted. Fetching weather...", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.perm_granted), Toast.LENGTH_SHORT).show()
             fetchLocationAndWeather()
         } else {
-            Toast.makeText(this, "Permission denied. Using home/default.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, getString(R.string.perm_denied), Toast.LENGTH_LONG).show()
             val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-            val savedHome = prefs.getString(KEY_HOME_CITY, "New York") ?: "New York"
+            val savedHome = prefs.getString(KEY_HOME_CITY, getString(R.string.default_city)) ?: getString(R.string.default_city)
             fetchWeather(savedHome)
         }
     }
@@ -63,6 +63,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rvWeeklyForecast: RecyclerView
     private lateinit var forecastAdapter: ForecastAdapter
 
+    private lateinit var rvDailyWeeklyForecast: RecyclerView
+
+    private lateinit var dailyForecastAdapter: DailyForecastAdapter
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -79,6 +83,7 @@ class MainActivity : AppCompatActivity() {
         ivWeatherIcon = findViewById(R.id.ivWeatherIcon)
         progressBar = findViewById(R.id.progressBar)
         rvWeeklyForecast = findViewById(R.id.rvWeeklyForecast)
+        rvDailyWeeklyForecast = findViewById(R.id.rvDailyWeeklyForecast)
 
         // Setup RecyclerView
         forecastAdapter = ForecastAdapter(emptyList())
@@ -101,6 +106,10 @@ class MainActivity : AppCompatActivity() {
                 )
             )
         }
+
+        dailyForecastAdapter = DailyForecastAdapter(emptyList())
+        rvDailyWeeklyForecast.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
+        rvDailyWeeklyForecast.adapter = dailyForecastAdapter
     }
 
     private fun fetchLocationAndWeather() {
@@ -153,7 +162,7 @@ class MainActivity : AppCompatActivity() {
         val timeoutHandler = android.os.Handler(Looper.getMainLooper())
         val timeoutRunnable = Runnable {
             if (tvCityName.text == getString(R.string.searching)) {
-                Toast.makeText(this, "GPS timeout. Using home/default.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.gps_timeout), Toast.LENGTH_SHORT).show()
                 fetchWeather(savedHome)
             }
         }
@@ -222,16 +231,16 @@ class MainActivity : AppCompatActivity() {
         tvTemperature.text = temp?.toString() ?: "--"
 
         // Condition
-        val rawCondition = weatherData.weatherDescriptionList?.firstOrNull()?.description ?: "clear"
-        tvConditionText.text = rawCondition.replaceFirstChar { it.uppercase() }
-        updateWeatherIcon(rawCondition, ivWeatherIcon)
+        val rawCondition = weatherData.weatherDescriptionList?.firstOrNull()?.description
+        tvConditionText.text = rawCondition?.replaceFirstChar { it.uppercase() } ?: ""
+        WeatherUtils.updateWeatherIcon(rawCondition, ivWeatherIcon)
 
         // Metrics
         tvHumidity.text = getString(R.string.humidity_format, weatherData.mainData?.humidity ?: 0)
         tvWind.text = getString(R.string.wind_format, weatherData.wind?.speed?.toInt() ?: 0)
         
         // Date Time
-        tvDateTimeLabel.text = SimpleDateFormat("EEEE, h:mm a", Locale.getDefault()).format(Date())
+        tvDateTimeLabel.text = SimpleDateFormat(getString(R.string.date_time_format), Locale.getDefault()).format(Date())
     }
 
     private fun hideKeyboard() {
@@ -249,19 +258,45 @@ class MainActivity : AppCompatActivity() {
                     if (response.isSuccessful && response.body() != null) {
                         val allForecast = response.body()!!.list
 
-                        // 🏆 BUG FIX: Extract real rain probability from the first forecast entry
+                        // Handle Precipitation Bug Fix
                         val firstForecastItem = allForecast.firstOrNull()
                         if (firstForecastItem != null) {
-                            // Now that 'pop' exists in your model, this line becomes 100% valid!
                             val precipProbability = ((firstForecastItem.pop ?: 0.0) * 100).toInt()
-
-                            // Sets the text formatting string directly onto your screen container
-                            tvPrecipitation.text = "Precip: $precipProbability%"
+                            tvPrecipitation.text = getString(R.string.precip_format, precipProbability)
                         }
 
-                        // Build your 24-hour timeline view strip
+                        // Handle Horizontal Timeline List (Next 8 slots)
                         val hourlyTimeline = allForecast.take(8)
                         forecastAdapter.updateData(hourlyTimeline)
+
+                        // 🏆 Group by local day and calculate real min/max temperatures across all slots
+                        val sdfLocal = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                        val dailyGrouped = allForecast.groupBy { 
+                            sdfLocal.format(Date(it.dt * 1000L))
+                        }
+
+                        val distinctDailyList = dailyGrouped.values.map { items ->
+                            // Calculate the day's actual min/max from all 3-hour slots available
+                            val temps = items.mapNotNull { it.main.temperature }
+                            val min = temps.minOrNull() ?: 0.0
+                            val max = temps.maxOrNull() ?: 0.0
+                            
+                            // Use midday (12:00) as representative for icon/desc, or first slot
+                            val representative = items.find { it.dtTxt.contains("12:00:00") } ?: items[0]
+                            
+                            representative.copy(
+                                main = representative.main.copy(tempMin = min, tempMax = max)
+                            )
+                        }.toMutableList()
+
+                        // 🏆 Pad to 7 days if the API only provides 5-6 (common for free tier)
+                        while (distinctDailyList.size < 7 && distinctDailyList.isNotEmpty()) {
+                            val lastItem = distinctDailyList.last()
+                            val nextDateInSeconds = lastItem.dt + 86400 // +1 day
+                            distinctDailyList.add(lastItem.copy(dt = nextDateInSeconds))
+                        }
+
+                        dailyForecastAdapter.updateData(distinctDailyList)
                     }
                 }
 
@@ -377,9 +412,9 @@ class MainActivity : AppCompatActivity() {
                 if (currentCity.isNotEmpty() && currentCity != getString(R.string.searching) && currentCity != getString(R.string.error_text)) {
                     prefs.edit().putString(KEY_HOME_CITY, currentCity).apply()
                     btnSetHome.text = getString(R.string.home_format, currentCity)
-                    Toast.makeText(this, "Home set to $currentCity", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.home_set, currentCity), Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(this, "Wait for weather to load first", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.wait_for_weather), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -389,7 +424,7 @@ class MainActivity : AppCompatActivity() {
             if (currentCity.isNotEmpty() && currentCity != getString(R.string.searching) && currentCity != getString(R.string.error_text)) {
                 prefs.edit().putString(KEY_HOME_CITY, currentCity).apply()
                 btnSetHome.text = getString(R.string.home_format, currentCity)
-                Toast.makeText(this, "Home updated to $currentCity", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.home_updated, currentCity), Toast.LENGTH_SHORT).show()
             }
             true
         }
@@ -404,14 +439,5 @@ class MainActivity : AppCompatActivity() {
         }
 
         dialog.show()
-    }
-
-    private fun updateWeatherIcon(condition: String, ivIcon: ImageView) {
-        when {
-            condition.contains("rain", ignoreCase = true) -> ivIcon.setImageResource(R.drawable.ic_weather_rainy)
-            condition.contains("cloud", ignoreCase = true) -> ivIcon.setImageResource(R.drawable.ic_weather_cloudy)
-            condition.contains("haze", ignoreCase = true) || condition.contains("mist", ignoreCase = true) -> ivIcon.setImageResource(R.drawable.ic_weather_haze)
-            else -> ivIcon.setImageResource(R.drawable.ic_weather_sunny)
-        }
     }
 }

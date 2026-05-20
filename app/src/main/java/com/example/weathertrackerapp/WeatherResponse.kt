@@ -18,7 +18,9 @@ data class Coord(
 
 data class Main(
     @SerializedName("temp") val temperature: Double?,
-    @SerializedName("humidity") val humidity: Int?
+    @SerializedName("humidity") val humidity: Int?,
+    @SerializedName("temp_min") val tempMin: Double?,
+    @SerializedName("temp_max") val tempMax: Double?
 )
 
 data class Weather(

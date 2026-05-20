@@ -32,7 +32,7 @@
                 android:id="@+id/tvCityName"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Raipur"
+                tools:text="Raipur"
                 android:textColor="#FFFFFF"
                 android:textSize="15sp"
                 android:textStyle="bold"
@@ -44,7 +44,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text=" · "
+                android:text="@string/dot_separator"
                 android:textColor="#9AA0A6"
                 android:textSize="15sp" />
 
@@ -52,7 +52,7 @@
                 android:id="@+id/tvChooseArea"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Choose area"
+                android:text="@string/choose_area"
                 android:textColor="#8AB4F8"
                 android:textSize="15sp"
                 android:clickable="true"
@@ -96,7 +96,7 @@
                     android:id="@+id/tvTemperature"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="42"
+                    tools:text="42"
                     android:textColor="#FFFFFF"
                     android:textSize="44sp"
                     android:fontFamily="sans-serif-light"
@@ -105,7 +105,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="°C"
+                    android:text="@string/celsius"
                     android:textColor="#9AA0A6"
                     android:textSize="14sp"
                     android:layout_gravity="top"
@@ -126,7 +126,7 @@
                     android:id="@+id/tvPrecipitation"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Precipitation: 0%"
+                    tools:text="Precipitation: 0%"
                     android:textColor="#9AA0A6"
                     android:textSize="10sp" />
 
@@ -134,7 +134,7 @@
                     android:id="@+id/tvHumidity"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Humidity: 24%"
+                    tools:text="Humidity: 24%"
                     android:textColor="#9AA0A6"
                     android:textSize="10sp"
                     android:layout_marginTop="1dp" />
@@ -143,7 +143,7 @@
                     android:id="@+id/tvWind"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Wind: 8 km/h"
+                    tools:text="Wind: 8 km/h"
                     android:textColor="#9AA0A6"
                     android:textSize="10sp"
                     android:layout_marginTop="1dp" />
@@ -160,7 +160,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Weather"
+                    android:text="@string/weather"
                     android:textColor="#FFFFFF"
                     android:textSize="16sp"
                     android:fontFamily="sans-serif-medium" />
@@ -169,7 +169,7 @@
                     android:id="@+id/tvDateTimeLabel"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Wednesday, 2:00 pm"
+                    tools:text="Wednesday, 2:00 pm"
                     android:textColor="#9AA0A6"
                     android:textSize="11sp"
                     android:layout_marginTop="1dp"
@@ -180,7 +180,7 @@
                     android:id="@+id/tvConditionText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Partly sunny"
+                    tools:text="Partly sunny"
                     android:textColor="#9AA0A6"
                     android:textSize="11sp"
                     android:layout_marginTop="1dp"
@@ -203,6 +203,14 @@
             android:layout_gravity="center_horizontal"
             android:visibility="gone"
             android:layout_marginTop="32dp" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvDailyWeeklyForecast"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="16dp"
+            android:nestedScrollingEnabled="false" />
 
     </LinearLayout>
 </ScrollView>

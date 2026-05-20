@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingVertical="14dp"
+    android:background="@android:color/transparent">
+
+    <!-- Column 1: Date (Strictly Left Aligned) -->
+    <TextView
+        android:id="@+id/tvDailyDate"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:fontFamily="sans-serif-medium"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:gravity="start|center_vertical"
+        android:textAlignment="viewStart"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/ivDailyIcon"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        tools:text="May 20 Today" />
+
+    <!-- Column 2: Icon (Perfectly Centered in Screen Row) -->
+    <ImageView
+        android:id="@+id/ivDailyIcon"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
+        android:scaleType="fitCenter"
+        android:contentDescription="@string/weather_icon_desc"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        tools:src="@drawable/ic_weather_sunny" />
+
+    <!-- Column 3: Temp (Strictly Right Aligned) -->
+    <TextView
+        android:id="@+id/tvDailyTempSpread"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:textColor="#9CA3AF"
+        android:textSize="14sp"
+        android:fontFamily="sans-serif-medium"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:gravity="end|center_vertical"
+        android:textAlignment="viewEnd"
+        app:layout_constraintStart_toEndOf="@+id/ivDailyIcon"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        tools:text="30° / 44°" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
