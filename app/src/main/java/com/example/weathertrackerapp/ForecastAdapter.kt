@@ -28,10 +28,10 @@ class ForecastAdapter(private var forecastList: List<ForecastItem>) :
 
         // 1. Smart Timeline Labels
         if (position == 0) {
-            holder.tvDay.text = "Now"
+            holder.tvDay.text = holder.itemView.context.getString(R.string.now)
         } else {
             val date = Date(item.dt * 1000L)
-            val sdf = SimpleDateFormat("h a", Locale.getDefault())
+            val sdf = SimpleDateFormat(holder.itemView.context.getString(R.string.hourly_format), Locale.getDefault())
             holder.tvDay.text = sdf.format(date)
         }
 

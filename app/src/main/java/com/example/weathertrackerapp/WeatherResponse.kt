@@ -8,7 +8,9 @@ data class WeatherResponse(
     @SerializedName("name") val cityName: String?,
     @SerializedName("sys") val sys: Sys?,
     @SerializedName("wind") val wind: Wind?,
-    @SerializedName("coord") val coord: Coord?
+    @SerializedName("coord") val coord: Coord?,
+    @SerializedName("dt") val dt: Long?,
+    @SerializedName("visibility") val visibility: Int?
 )
 
 data class Coord(
@@ -20,15 +22,20 @@ data class Main(
     @SerializedName("temp") val temperature: Double?,
     @SerializedName("humidity") val humidity: Int?,
     @SerializedName("temp_min") val tempMin: Double?,
-    @SerializedName("temp_max") val tempMax: Double?
+    @SerializedName("temp_max") val tempMax: Double?,
+    @SerializedName("pressure") val pressure: Int?,
+    @SerializedName("feels_like") val feelsLike: Double?
 )
 
 data class Weather(
+    @SerializedName("main") val main: String?,
     @SerializedName("description") val description: String?
 )
 
 data class Sys(
-    @SerializedName("country") val country: String?
+    @SerializedName("country") val country: String?,
+    @SerializedName("sunrise") val sunrise: Long?,
+    @SerializedName("sunset") val sunset: Long?
 )
 
 data class Wind(
