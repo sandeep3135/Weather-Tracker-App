@@ -12,6 +12,7 @@ import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
@@ -67,6 +68,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var dailyForecastAdapter: DailyForecastAdapter
 
+    private lateinit var swipeRefreshLayout: SwipeRefreshLayout
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -84,6 +87,25 @@ class MainActivity : AppCompatActivity() {
         progressBar = findViewById(R.id.progressBar)
         rvWeeklyForecast = findViewById(R.id.rvWeeklyForecast)
         rvDailyWeeklyForecast = findViewById(R.id.rvDailyWeeklyForecast)
+
+        // Initialize Swipe Refresh Wrapper
+        swipeRefreshLayout = findViewById(R.id.swipeRefreshLayout)
+
+        // Handle Swipe Down Action dynamically
+        swipeRefreshLayout.setOnRefreshListener {
+            val activeCityString = tvCityName.text.toString().split(",")[0].trim()
+
+            if (activeCityString.isNotEmpty() &&
+                activeCityString != getString(R.string.searching) &&
+                activeCityString != getString(R.string.error_text)) {
+
+                // If displaying a valid city, re-fetch data for it
+                fetchWeather(activeCityString)
+            } else {
+                // Fallback to checking location coordinates if city name isn't loaded yet
+                fetchLocationAndWeather()
+            }
+        }
 
         // Setup RecyclerView
         forecastAdapter = ForecastAdapter(emptyList())
@@ -212,6 +234,7 @@ class MainActivity : AppCompatActivity() {
                 override fun onFailure(call: Call<WeatherResponse>, t: Throwable) {
                     progressBar.visibility = View.GONE
                     tvCityName.text = getString(R.string.no_connection)
+                    swipeRefreshLayout.isRefreshing = false // Stop spinner here
                 }
             })
     }
@@ -298,10 +321,12 @@ class MainActivity : AppCompatActivity() {
 
                         dailyForecastAdapter.updateData(distinctDailyList)
                     }
+                    swipeRefreshLayout.isRefreshing = false // 🏆 Stop Spinner on Success Pass
                 }
 
                 override fun onFailure(call: Call<ForecastResponse>, t: Throwable) {
                     // Fail silently for forecast
+                    swipeRefreshLayout.isRefreshing = false // 🏆 Stop Spinner on Error Pass
                 }
             })
     }
@@ -350,6 +375,7 @@ class MainActivity : AppCompatActivity() {
                 override fun onFailure(call: Call<WeatherResponse>, t: Throwable) {
                     progressBar.visibility = View.GONE
                     tvCityName.text = getString(R.string.no_connection)
+                    swipeRefreshLayout.isRefreshing = false // Stop spinner here
                 }
             })
     }

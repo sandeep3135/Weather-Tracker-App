@@ -45,10 +45,13 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 
+
     // Retrofit core library for making HTTP internet requests
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     // Gson converter to automatically parse incoming JSON data streams
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     // Google Play Services Location for GPS tracking
     implementation("com.google.android.gms:play-services-location:21.3.0")
+
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
 }
