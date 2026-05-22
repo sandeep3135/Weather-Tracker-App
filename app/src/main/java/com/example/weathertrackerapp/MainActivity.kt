@@ -258,6 +258,11 @@ class MainActivity : AppCompatActivity() {
         val country = weatherData.sys?.country
         tvCityName.text = if (!country.isNullOrEmpty()) getString(R.string.city_country_format, cityName, country) else cityName
 
+        /// 🏆 NEW PERSISTENCE HOOK: Add the verified city into our local storage queue
+        if (cityName.isNotEmpty() && cityName != getString(R.string.searching) && cityName != getString(R.string.error_text)) {
+            SearchHistoryUtils.addCityToHistory(this, cityName)
+        }
+
         // Temperature
         val temp = weatherData.mainData?.temperature?.toInt()
         tvTemperature.text = temp?.toString() ?: "--"
@@ -488,6 +493,44 @@ class MainActivity : AppCompatActivity() {
         val btnPrecise: View = dialogView.findViewById(R.id.btnUsePreciseLocation)
         val chipGroupPopular: ChipGroup = dialogView.findViewById(R.id.chipGroupPopular)
         val btnSetHome: MaterialButton = dialogView.findViewById(R.id.btnSetHome)
+
+        // 🏆 NEW: Link up your persistent storage elements
+        val tvRecentSearchesHeader: TextView = dialogView.findViewById(R.id.tvRecentSearchesHeader)
+        val chipGroupRecent: ChipGroup = dialogView.findViewById(R.id.chipGroupRecent)
+
+        // Fetch your history list from local disk storage
+        val recentCities = SearchHistoryUtils.getSearchHistory(this)
+
+        if (recentCities.isNotEmpty()) {
+            // Flip visibility parameters dynamically
+            tvRecentSearchesHeader.visibility = View.VISIBLE
+            chipGroupRecent.removeAllViews()
+
+            // Run a clean structural loop over the items and inflate custom chips
+            for (city in recentCities) {
+                val chip = Chip(this).apply {
+                    text = city
+                    isClickable = true
+                    isFocusable = true
+                    setCheckable(false)
+                    // Professional Styling to match Dialog UI
+                    setChipBackgroundColor(android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#303134")))
+                    setChipStrokeColor(android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#3C4043")))
+                    setChipStrokeWidth(1f)
+                    setTextColor(android.graphics.Color.WHITE)
+                    chipStartPadding = 12f
+                    chipEndPadding = 12f
+
+                    setOnClickListener {
+                        dialog.dismiss()
+                        fetchWeather(city)
+                    }
+                }
+                chipGroupRecent.addView(chip)
+            }
+        } else {
+            tvRecentSearchesHeader.visibility = View.GONE
+        }
 
         val prefs = getSharedPreferences(prefsName, MODE_PRIVATE)
         val savedHome = prefs.getString(keyHomeCity, null)
