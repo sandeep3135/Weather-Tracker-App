@@ -213,6 +213,42 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun fetchWeatherByCoords(lat: Double, lon: Double, displayName: String) {
+
+        // 🏆 CHECK OFFLINE STATE SAFELY
+        if (!NetworkUtils.isNetworkAvailable(this)) {
+            val cachedData = SearchHistoryUtils.getCachedWeatherData(this)
+
+            progressBar.visibility = View.GONE
+            swipeRefreshLayout.isRefreshing = false
+
+            if (cachedData != null) {
+                try {
+                    val gson = com.google.gson.Gson()
+                    val weatherResponse = gson.fromJson(cachedData.first, WeatherResponse::class.java)
+
+                    if (weatherResponse != null) {
+                        displayWeatherData(weatherResponse, weatherResponse.cityName ?: displayName, cachedData.second)
+                        
+                        // 🏆 RESTORE FORECAST CACHE
+                        val cachedForecast = SearchHistoryUtils.getCachedForecastData(this)
+                        if (cachedForecast != null) {
+                            val forecastResponse = gson.fromJson(cachedForecast, ForecastResponse::class.java)
+                            if (forecastResponse != null) processForecastResponse(forecastResponse)
+                        }
+                        
+                        Toast.makeText(this, "Running in offline fallback mode", Toast.LENGTH_LONG).show()
+                        return // Exit cleanly
+                    }
+                } catch (_: Exception) {
+                    // Fail gracefully if json parsing hiccups
+                }
+            }
+
+            // 🏆 FALLBACK: If absolutely zero cache exists on disk memory, display standard error string safely
+            tvCityName.text = getString(R.string.no_connection)
+            Toast.makeText(this, "No internet connection available", Toast.LENGTH_LONG).show()
+            return
+        }
         progressBar.visibility = View.VISIBLE
 
         var finalCityName = displayName
@@ -284,6 +320,15 @@ class MainActivity : AppCompatActivity() {
         
         // Date Time
         tvDateTimeLabel.text = SimpleDateFormat(getString(R.string.date_time_format), Locale.getDefault()).format(Date())
+
+        // 🏆 CACHE ENGINE HOOK: Serialize the fresh data object and save a backup snapshot copy
+        try {
+            val gson = com.google.gson.Gson()
+            val rawJsonString = gson.toJson(weatherData)
+            SearchHistoryUtils.saveLastCachedWeather(this, rawJsonString, displayName)
+        } catch (_: Exception) {
+            // Fails silently if serialization hiccups so it never impacts app performance
+        }
     }
 
     private fun updateRootBackground(weatherData: WeatherResponse) {
@@ -330,50 +375,15 @@ class MainActivity : AppCompatActivity() {
             .enqueue(object : Callback<ForecastResponse> {
                 override fun onResponse(call: Call<ForecastResponse>, response: Response<ForecastResponse>) {
                     if (response.isSuccessful && response.body() != null) {
-                        val allForecast = response.body()!!.list
-
-                        // Handle Precipitation Bug Fix
-                        val firstForecastItem = allForecast.firstOrNull()
-                        if (firstForecastItem != null) {
-                            val precipProbability = ((firstForecastItem.pop ?: 0.0) * 100).toInt()
-                            tvPrecipitation.text = getString(R.string.precip_format, precipProbability)
-                        }
-
-                        // Handle Horizontal Timeline List (Next 8 slots)
-                        val hourlyTimeline = allForecast.take(8)
-                        forecastAdapter.updateData(hourlyTimeline)
-
-                        // 1. Extract distinct days and find real daily min/max
-                        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                        val dailyItems = mutableListOf<ForecastItem>()
-                        val dayGroups = allForecast.groupBy { sdf.format(Date(it.dt * 1000L)) }
-
-                        // Sort keys to ensure chronological order
-                        val sortedDays = dayGroups.keys.sorted()
+                        val forecastResponse = response.body()!!
                         
-                        for (dayKey in sortedDays) {
-                            val itemsForDay = dayGroups[dayKey] ?: continue
-                            val min = itemsForDay.minOf { it.main.tempMin ?: it.main.temperature ?: 0.0 }
-                            val max = itemsForDay.maxOf { it.main.tempMax ?: it.main.temperature ?: 0.0 }
-                            
-                            // Choose midday (12:00) as the representative icon/description
-                            val representative = itemsForDay.find { it.dtTxt.contains("12:00:00") } ?: itemsForDay[itemsForDay.size / 2]
-                            
-                            dailyItems.add(
-                                representative.copy(
-                                    main = representative.main.copy(tempMin = min, tempMax = max)
-                                )
-                            )
-                        }
+                        // 🏆 CACHE ENGINE HOOK: Save the forecast to disk
+                        try {
+                            val gson = com.google.gson.Gson()
+                            SearchHistoryUtils.saveLastCachedForecast(this@MainActivity, gson.toJson(forecastResponse))
+                        } catch (_: Exception) {}
 
-                        // 2. FORCE exactly 7 items by padding if the API only returns 5-6 days
-                        while (dailyItems.size < 7) {
-                            val last = dailyItems.lastOrNull() ?: firstForecastItem!!
-                            dailyItems.add(last.copy(dt = last.dt + 86400, dtTxt = "padding"))
-                        }
-
-                        // 3. Update UI
-                        updateDailyForecastUI(dailyItems.take(7))
+                        processForecastResponse(forecastResponse)
                     }
                     swipeRefreshLayout.isRefreshing = false // 🏆 Stop Spinner on Success Pass
                 }
@@ -383,6 +393,53 @@ class MainActivity : AppCompatActivity() {
                     swipeRefreshLayout.isRefreshing = false // 🏆 Stop Spinner on Error Pass
                 }
             })
+    }
+
+    private fun processForecastResponse(forecastResponse: ForecastResponse) {
+        val allForecast = forecastResponse.list
+
+        // Handle Precipitation Bug Fix
+        val firstForecastItem = allForecast.firstOrNull()
+        if (firstForecastItem != null) {
+            val precipProbability = ((firstForecastItem.pop ?: 0.0) * 100).toInt()
+            tvPrecipitation.text = getString(R.string.precip_format, precipProbability)
+        }
+
+        // Handle Horizontal Timeline List (Next 8 slots)
+        val hourlyTimeline = allForecast.take(8)
+        forecastAdapter.updateData(hourlyTimeline)
+
+        // 1. Extract distinct days and find real daily min/max
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val dailyItems = mutableListOf<ForecastItem>()
+        val dayGroups = allForecast.groupBy { sdf.format(Date(it.dt * 1000L)) }
+
+        // Sort keys to ensure chronological order
+        val sortedDays = dayGroups.keys.sorted()
+
+        for (dayKey in sortedDays) {
+            val itemsForDay = dayGroups[dayKey] ?: continue
+            val min = itemsForDay.minOf { it.main.tempMin ?: it.main.temperature ?: 0.0 }
+            val max = itemsForDay.maxOf { it.main.tempMax ?: it.main.temperature ?: 0.0 }
+
+            // Choose midday (12:00) as the representative icon/description
+            val representative = itemsForDay.find { it.dtTxt.contains("12:00:00") } ?: itemsForDay[itemsForDay.size / 2]
+
+            dailyItems.add(
+                representative.copy(
+                    main = representative.main.copy(tempMin = min, tempMax = max)
+                )
+            )
+        }
+
+        // 2. FORCE exactly 7 items by padding if the API only returns 5-6 days
+        while (dailyItems.size < 7) {
+            val last = dailyItems.lastOrNull() ?: firstForecastItem!!
+            dailyItems.add(last.copy(dt = last.dt + 86400, dtTxt = "padding"))
+        }
+
+        // 3. Update UI
+        updateDailyForecastUI(dailyItems.take(7))
     }
 
     private fun updateDailyForecastUI(items: List<ForecastItem>) {
@@ -454,6 +511,38 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun fetchWeather(city: String) {
+        if (!NetworkUtils.isNetworkAvailable(this)) {
+            val cachedData = SearchHistoryUtils.getCachedWeatherData(this)
+
+            progressBar.visibility = View.GONE
+            swipeRefreshLayout.isRefreshing = false
+
+            if (cachedData != null) {
+                try {
+                    val gson = com.google.gson.Gson()
+                    val weatherResponse = gson.fromJson(cachedData.first, WeatherResponse::class.java)
+
+                    if (weatherResponse != null) {
+                        displayWeatherData(weatherResponse, weatherResponse.cityName ?: city, cachedData.second)
+
+                        // 🏆 RESTORE FORECAST CACHE
+                        val cachedForecast = SearchHistoryUtils.getCachedForecastData(this)
+                        if (cachedForecast != null) {
+                            val forecastResponse = gson.fromJson(cachedForecast, ForecastResponse::class.java)
+                            if (forecastResponse != null) processForecastResponse(forecastResponse)
+                        }
+
+                        Toast.makeText(this, "Running in offline fallback mode", Toast.LENGTH_LONG).show()
+                        return
+                    }
+                } catch (_: Exception) {}
+            }
+
+            tvCityName.text = getString(R.string.no_connection)
+            Toast.makeText(this, "No internet connection available", Toast.LENGTH_LONG).show()
+            return
+        }
+
         progressBar.visibility = View.VISIBLE
         RetrofitClient.instance.getWeatherData(city, apiKey, "metric")
             .enqueue(object : Callback<WeatherResponse> {

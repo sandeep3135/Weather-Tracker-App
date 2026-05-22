@@ -41,4 +41,37 @@ object SearchHistoryUtils {
         val serializedString = trimmedHistory.joinToString(",")
         getPrefs(context).edit().putString(KEY_HISTORY, serializedString).apply()
     }
+
+    private const val KEY_CACHED_WEATHER = "cached_weather_response"
+    private const val KEY_CACHED_CITY = "cached_weather_city"
+    private const val KEY_CACHED_FORECAST = "cached_forecast_response"
+
+    // 🏆 Save the raw weather string and displayName to disk on successful network pass
+    fun saveLastCachedWeather(context: Context, rawJsonString: String, displayName: String) {
+        getPrefs(context).edit()
+            .putString(KEY_CACHED_WEATHER, rawJsonString)
+            .putString(KEY_CACHED_CITY, displayName)
+            .apply()
+    }
+
+    // 🏆 Save the raw forecast string to disk
+    fun saveLastCachedForecast(context: Context, rawJsonString: String) {
+        getPrefs(context).edit().putString(KEY_CACHED_FORECAST, rawJsonString).apply()
+    }
+
+    // 🏆 Retrieve the cached city pair back when the network is completely dark
+    fun getCachedWeatherData(context: Context): Pair<String, String>? {
+        val prefs = getPrefs(context)
+        val rawJson = prefs.getString(KEY_CACHED_WEATHER, "") ?: ""
+        val displayName = prefs.getString(KEY_CACHED_CITY, "") ?: ""
+
+        if (rawJson.isEmpty() || displayName.isEmpty()) return null
+        return Pair(rawJson, displayName)
+    }
+
+    // 🏆 Retrieve the cached forecast back
+    fun getCachedForecastData(context: Context): String? {
+        val rawJson = getPrefs(context).getString(KEY_CACHED_FORECAST, "") ?: ""
+        return if (rawJson.isEmpty()) null else rawJson
+    }
 }
