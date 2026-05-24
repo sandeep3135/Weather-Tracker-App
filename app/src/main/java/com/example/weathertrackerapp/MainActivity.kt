@@ -336,34 +336,27 @@ class MainActivity : AppCompatActivity() {
         val mainCondition = weather?.main?.lowercase(Locale.getDefault()) ?: ""
         val description = weather?.description?.lowercase(Locale.getDefault()) ?: ""
         
-        val dt = weatherData.dt ?: (System.currentTimeMillis() / 1000)
-        val sunrise = weatherData.sys?.sunrise ?: 0L
-        val sunset = weatherData.sys?.sunset ?: 0L
-        
-        // Determine if it's currently night at the location
-        val isNight = if (sunrise != 0L && sunset != 0L) {
-            dt !in sunrise..sunset
-        } else {
-            val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-            hour !in 6..18
-        }
+        // Use the current time at the location's timezone if possible, 
+        // but for now we'll use the local device hour as a vibe indicator
+        val calendar = Calendar.getInstance()
+        val hour = calendar.get(Calendar.HOUR_OF_DAY)
 
         val backgroundDrawableId = when {
+            // Priority 1: Weather Conditions (Rain/Storm/Clouds)
             mainCondition.contains("thunderstorm") || mainCondition.contains("rain") || 
             mainCondition.contains("drizzle") || description.contains("rain") -> {
                 R.drawable.bg_weather_rainy
             }
-            mainCondition.contains("clear") || description.contains("clear") -> {
-                if (isNight) R.drawable.bg_weather_default else R.drawable.bg_weather_sunny
-            }
-            mainCondition.contains("cloud") || mainCondition.contains("haze") || 
-            mainCondition.contains("mist") || mainCondition.contains("fog") || 
-            description.contains("cloud") || description.contains("haze") -> {
+            mainCondition.contains("cloud") || description.contains("cloud") ||
+            mainCondition.contains("haze") || mainCondition.contains("mist") -> {
                 R.drawable.bg_weather_cloudy
             }
-            else -> {
-                if (isNight) R.drawable.bg_weather_default else R.drawable.bg_weather_sunny
-            }
+            
+            // Priority 2: Time of Day Vibe (Morning, Afternoon, Evening, Night)
+            hour in 5..11 -> R.drawable.bg_weather_morning    // 5 AM - 11 AM
+            hour in 12..16 -> R.drawable.bg_weather_afternoon // 12 PM - 4 PM
+            hour in 17..20 -> R.drawable.bg_weather_evening   // 5 PM - 8 PM
+            else -> R.drawable.bg_weather_night               // 9 PM - 4 AM
         }
         swipeRefreshLayout.setBackgroundResource(backgroundDrawableId)
     }
