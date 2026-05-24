@@ -41,7 +41,8 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
-                        android:gravity="center_vertical">
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="4dp">
 
                         <TextView
                             android:id="@+id/tvCityName"
@@ -96,18 +97,20 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:gravity="end">
+                    android:gravity="end"
+                    android:minWidth="120dp">
 
                     <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
-                        android:gravity="center_vertical">
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="4dp">
 
                         <ImageView
                             android:id="@+id/ivWeatherIcon"
-                            android:layout_width="64dp"
-                            android:layout_height="64dp"
+                            android:layout_width="72dp"
+                            android:layout_height="72dp"
                             tools:src="@drawable/ic_weather_sunny"
                             android:scaleType="fitCenter" />
 
@@ -177,7 +180,7 @@
                             android:layout_height="wrap_content"
                             android:text="@string/precip_label"
                             android:textColor="#B0B0B0"
-                            android:textSize="10sp"
+                            android:textSize="11sp"
                             android:fontFamily="sans-serif-black"
                             android:letterSpacing="0.08" />
                         <TextView
@@ -186,7 +189,7 @@
                             android:layout_height="wrap_content"
                             tools:text="0%"
                             android:textColor="#FFFFFF"
-                            android:textSize="14sp"
+                            android:textSize="15sp"
                             android:fontFamily="sans-serif-medium"
                             android:layout_marginTop="2dp" />
                     </LinearLayout>
@@ -204,7 +207,7 @@
                             android:layout_height="wrap_content"
                             android:text="@string/humidity_label"
                             android:textColor="#B0B0B0"
-                            android:textSize="10sp"
+                            android:textSize="11sp"
                             android:fontFamily="sans-serif-black"
                             android:letterSpacing="0.08" />
                         <TextView
@@ -213,7 +216,7 @@
                             android:layout_height="wrap_content"
                             tools:text="16%"
                             android:textColor="#FFFFFF"
-                            android:textSize="14sp"
+                            android:textSize="15sp"
                             android:fontFamily="sans-serif-medium"
                             android:layout_marginTop="2dp" />
                     </LinearLayout>
@@ -231,7 +234,7 @@
                             android:layout_height="wrap_content"
                             android:text="@string/wind_label"
                             android:textColor="#B0B0B0"
-                            android:textSize="10sp"
+                            android:textSize="11sp"
                             android:fontFamily="sans-serif-black"
                             android:letterSpacing="0.08" />
                         <TextView
@@ -240,7 +243,7 @@
                             android:layout_height="wrap_content"
                             tools:text="2 km/h"
                             android:textColor="#FFFFFF"
-                            android:textSize="14sp"
+                            android:textSize="15sp"
                             android:fontFamily="sans-serif-medium"
                             android:layout_marginTop="2dp" />
                     </LinearLayout>
@@ -270,7 +273,7 @@
                             android:layout_height="wrap_content"
                             android:text="@string/visibility_label"
                             android:textColor="#B0B0B0"
-                            android:textSize="10sp"
+                            android:textSize="11sp"
                             android:fontFamily="sans-serif-black"
                             android:letterSpacing="0.08" />
                         <TextView
@@ -279,7 +282,7 @@
                             android:layout_height="wrap_content"
                             tools:text="10 km"
                             android:textColor="#FFFFFF"
-                            android:textSize="14sp"
+                            android:textSize="15sp"
                             android:fontFamily="sans-serif-medium"
                             android:layout_marginTop="2dp" />
                     </LinearLayout>
@@ -297,7 +300,7 @@
                             android:layout_height="wrap_content"
                             android:text="@string/pressure_label"
                             android:textColor="#B0B0B0"
-                            android:textSize="10sp"
+                            android:textSize="11sp"
                             android:fontFamily="sans-serif-black"
                             android:letterSpacing="0.08" />
                         <TextView
@@ -306,7 +309,7 @@
                             android:layout_height="wrap_content"
                             tools:text="1002 hPa"
                             android:textColor="#FFFFFF"
-                            android:textSize="14sp"
+                            android:textSize="15sp"
                             android:fontFamily="sans-serif-medium"
                             android:layout_marginTop="2dp" />
                     </LinearLayout>

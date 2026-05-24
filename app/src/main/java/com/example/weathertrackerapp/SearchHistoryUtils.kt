@@ -2,6 +2,7 @@ package com.example.weathertrackerapp
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 
 object SearchHistoryUtils {
     private const val PREFS_NAME = "WeatherPrefs"
@@ -39,7 +40,7 @@ object SearchHistoryUtils {
 
         // Serialize back into a single clean string
         val serializedString = trimmedHistory.joinToString(",")
-        getPrefs(context).edit().putString(KEY_HISTORY, serializedString).apply()
+        getPrefs(context).edit { putString(KEY_HISTORY, serializedString) }
     }
 
     private const val KEY_CACHED_WEATHER = "cached_weather_response"
@@ -48,15 +49,15 @@ object SearchHistoryUtils {
 
     // 🏆 Save the raw weather string and displayName to disk on successful network pass
     fun saveLastCachedWeather(context: Context, rawJsonString: String, displayName: String) {
-        getPrefs(context).edit()
-            .putString(KEY_CACHED_WEATHER, rawJsonString)
-            .putString(KEY_CACHED_CITY, displayName)
-            .apply()
+        getPrefs(context).edit {
+            putString(KEY_CACHED_WEATHER, rawJsonString)
+            putString(KEY_CACHED_CITY, displayName)
+        }
     }
 
     // 🏆 Save the raw forecast string to disk
     fun saveLastCachedForecast(context: Context, rawJsonString: String) {
-        getPrefs(context).edit().putString(KEY_CACHED_FORECAST, rawJsonString).apply()
+        getPrefs(context).edit { putString(KEY_CACHED_FORECAST, rawJsonString) }
     }
 
     // 🏆 Retrieve the cached city pair back when the network is completely dark
@@ -72,6 +73,11 @@ object SearchHistoryUtils {
     // 🏆 Retrieve the cached forecast back
     fun getCachedForecastData(context: Context): String? {
         val rawJson = getPrefs(context).getString(KEY_CACHED_FORECAST, "") ?: ""
-        return if (rawJson.isEmpty()) null else rawJson
+        return rawJson.ifEmpty { null }
+    }
+
+    // 🏆 Clear all history and cache for a fresh start
+    fun clearAll(context: Context) {
+        getPrefs(context).edit { clear() }
     }
 }

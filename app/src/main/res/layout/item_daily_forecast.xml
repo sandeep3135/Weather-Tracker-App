@@ -28,8 +28,8 @@
     <!-- Column 2: Icon (Perfectly Centered in Screen Row) -->
     <ImageView
         android:id="@+id/ivDailyIcon"
-        android:layout_width="22dp"
-        android:layout_height="22dp"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
         android:scaleType="fitCenter"
         android:contentDescription="@string/weather_icon_desc"
         app:layout_constraintStart_toStartOf="parent"

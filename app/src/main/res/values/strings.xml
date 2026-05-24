@@ -56,4 +56,7 @@
     <string name="visibility_format">%1$d km</string>
     <string name="pressure_format">%1$d hPa</string>
     <string name="feels_like_format">Feels like %1$d°</string>
+    <string name="recent_searches">Recent Searches</string>
+    <string name="clear_all">Clear All</string>
+    <string name="quick_actions">Quick Actions</string>
 </resources>

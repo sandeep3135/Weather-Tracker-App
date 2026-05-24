@@ -10,6 +10,7 @@ data class WeatherResponse(
     @SerializedName("wind") val wind: Wind?,
     @SerializedName("coord") val coord: Coord?,
     @SerializedName("dt") val dt: Long?,
+    @SerializedName("timezone") val timezone: Int?,
     @SerializedName("visibility") val visibility: Int?
 )
 

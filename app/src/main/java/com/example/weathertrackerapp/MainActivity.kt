@@ -13,6 +13,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
+import androidx.core.graphics.toColorInt
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.gms.location.*
 import com.google.android.material.button.MaterialButton
@@ -333,30 +335,21 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateRootBackground(weatherData: WeatherResponse) {
         val weather = weatherData.weatherDescriptionList?.firstOrNull()
-        val mainCondition = weather?.main?.lowercase(Locale.getDefault()) ?: ""
-        val description = weather?.description?.lowercase(Locale.getDefault()) ?: ""
-        
-        // Use the current time at the location's timezone if possible, 
-        // but for now we'll use the local device hour as a vibe indicator
-        val calendar = Calendar.getInstance()
-        val hour = calendar.get(Calendar.HOUR_OF_DAY)
+        val mainCondition = weather?.main
+        val description = weather?.description
 
-        val backgroundDrawableId = when {
-            // Priority 1: Weather Conditions (Rain/Storm/Clouds)
-            mainCondition.contains("thunderstorm") || mainCondition.contains("rain") || 
-            mainCondition.contains("drizzle") || description.contains("rain") -> {
-                R.drawable.bg_weather_rainy
-            }
-            mainCondition.contains("cloud") || description.contains("cloud") ||
-            mainCondition.contains("haze") || mainCondition.contains("mist") -> {
-                R.drawable.bg_weather_cloudy
-            }
-            
-            // Priority 2: Time of Day Vibe (Morning, Afternoon, Evening, Night)
-            hour in 5..11 -> R.drawable.bg_weather_morning    // 5 AM - 11 AM
-            hour in 12..16 -> R.drawable.bg_weather_afternoon // 12 PM - 4 PM
-            hour in 17..20 -> R.drawable.bg_weather_evening   // 5 PM - 8 PM
-            else -> R.drawable.bg_weather_night               // 9 PM - 4 AM
+        // Calculate the local time at the weather location using the VibeEngine
+        val cityTimezoneOffset = weatherData.timezone ?: 0
+        val localHour = VibeEngine.getLocalHour(cityTimezoneOffset, System.currentTimeMillis())
+
+        val vibe = VibeEngine.calculateVibe(mainCondition, description, localHour)
+
+        val backgroundDrawableId = when (vibe) {
+            VibeEngine.WeatherVibe.RAINY -> R.drawable.bg_weather_rainy
+            VibeEngine.WeatherVibe.MORNING -> R.drawable.bg_weather_morning
+            VibeEngine.WeatherVibe.AFTERNOON -> R.drawable.bg_weather_afternoon
+            VibeEngine.WeatherVibe.EVENING -> R.drawable.bg_weather_evening
+            VibeEngine.WeatherVibe.NIGHT -> R.drawable.bg_weather_night
         }
         swipeRefreshLayout.setBackgroundResource(backgroundDrawableId)
     }
@@ -476,7 +469,7 @@ class MainActivity : AppCompatActivity() {
                 ).apply {
                     setMargins(0, 0, 0, 0)
                 }
-                divider.setBackgroundColor(android.graphics.Color.parseColor("#15FFFFFF"))
+                divider.setBackgroundColor("#15FFFFFF".toColorInt())
                 llDailyForecastContainer.addView(divider)
             }
         }
@@ -577,7 +570,8 @@ class MainActivity : AppCompatActivity() {
         val btnSetHome: MaterialButton = dialogView.findViewById(R.id.btnSetHome)
 
         // 🏆 NEW: Link up your persistent storage elements
-        val tvRecentSearchesHeader: TextView = dialogView.findViewById(R.id.tvRecentSearchesHeader)
+        val rlRecentSearches: View = dialogView.findViewById(R.id.rlRecentSearches)
+        val tvClearHistory: TextView = dialogView.findViewById(R.id.tvClearHistory)
         val chipGroupRecent: ChipGroup = dialogView.findViewById(R.id.chipGroupRecent)
 
         // Fetch your history list from local disk storage
@@ -585,7 +579,7 @@ class MainActivity : AppCompatActivity() {
 
         if (recentCities.isNotEmpty()) {
             // Flip visibility parameters dynamically
-            tvRecentSearchesHeader.visibility = View.VISIBLE
+            rlRecentSearches.visibility = View.VISIBLE
             chipGroupRecent.removeAllViews()
 
             // Run a clean structural loop over the items and inflate custom chips
@@ -594,11 +588,11 @@ class MainActivity : AppCompatActivity() {
                     text = city
                     isClickable = true
                     isFocusable = true
-                    setCheckable(false)
+                    isCheckable = false
                     // Professional Styling to match Dialog UI
-                    setChipBackgroundColor(android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#303134")))
-                    setChipStrokeColor(android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#3C4043")))
-                    setChipStrokeWidth(1f)
+                    chipBackgroundColor = android.content.res.ColorStateList.valueOf("#303134".toColorInt())
+                    chipStrokeColor = android.content.res.ColorStateList.valueOf("#3C4043".toColorInt())
+                    chipStrokeWidth = 1f
                     setTextColor(android.graphics.Color.WHITE)
                     chipStartPadding = 12f
                     chipEndPadding = 12f
@@ -611,7 +605,13 @@ class MainActivity : AppCompatActivity() {
                 chipGroupRecent.addView(chip)
             }
         } else {
-            tvRecentSearchesHeader.visibility = View.GONE
+            rlRecentSearches.visibility = View.GONE
+        }
+
+        tvClearHistory.setOnClickListener {
+            SearchHistoryUtils.clearAll(this)
+            rlRecentSearches.visibility = View.GONE
+            chipGroupRecent.removeAllViews()
         }
 
         val prefs = getSharedPreferences(prefsName, MODE_PRIVATE)
@@ -657,7 +657,7 @@ class MainActivity : AppCompatActivity() {
             } else {
                 val currentCity = tvCityName.text.toString().split(",")[0].trim()
                 if (currentCity.isNotEmpty() && currentCity != getString(R.string.searching) && currentCity != getString(R.string.error_text)) {
-                    prefs.edit().putString(keyHomeCity, currentCity).apply()
+                    prefs.edit { putString(keyHomeCity, currentCity) }
                     btnSetHome.text = getString(R.string.home_format, currentCity)
                     Toast.makeText(this, getString(R.string.home_set, currentCity), Toast.LENGTH_SHORT).show()
                 } else {
@@ -669,7 +669,7 @@ class MainActivity : AppCompatActivity() {
         btnSetHome.setOnLongClickListener {
             val currentCity = tvCityName.text.toString().split(",")[0].trim()
             if (currentCity.isNotEmpty() && currentCity != getString(R.string.searching) && currentCity != getString(R.string.error_text)) {
-                prefs.edit().putString(keyHomeCity, currentCity).apply()
+                prefs.edit { putString(keyHomeCity, currentCity) }
                 btnSetHome.text = getString(R.string.home_format, currentCity)
                 Toast.makeText(this, getString(R.string.home_updated, currentCity), Toast.LENGTH_SHORT).show()
             }
