@@ -321,7 +321,9 @@ class MainActivity : AppCompatActivity() {
         tvFeelsLike.text = getString(R.string.feels_like_format, weatherData.mainData?.feelsLike?.toInt() ?: 0)
         
         // Date Time
-        tvDateTimeLabel.text = SimpleDateFormat(getString(R.string.date_time_format), Locale.getDefault()).format(Date())
+        // 🏆 UPDATED: Extracts the city's timezone offset and formats its actual live time profile
+        val cityTimezoneOffset = weatherData.timezone ?: 0
+        tvDateTimeLabel.text = WeatherUtils.formatLocalTimeWithOffset(cityTimezoneOffset)
 
         // 🏆 CACHE ENGINE HOOK: Serialize the fresh data object and save a backup snapshot copy
         try {
