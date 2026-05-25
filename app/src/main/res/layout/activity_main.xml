@@ -27,7 +27,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="top"
-                android:layout_marginTop="32dp"
+                android:layout_marginTop="24dp"
                 android:layout_marginBottom="40dp">
 
                 <!-- Left: City, Time, and Location Button -->
