@@ -16,6 +16,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.core.graphics.toColorInt
 import androidx.recyclerview.widget.RecyclerView
+import androidx.work.*
 import com.google.android.gms.location.*
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.Chip
@@ -71,6 +72,19 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var swipeRefreshLayout: SwipeRefreshLayout
 
+    private val clockHandler = android.os.Handler(Looper.getMainLooper())
+    private var currentCityTimezoneOffset: Int = 0
+    private val clockRunnable = object : Runnable {
+        override fun run() {
+            if (::tvDateTimeLabel.isInitialized) {
+                tvDateTimeLabel.text = WeatherUtils.formatLocalTimeWithOffset(currentCityTimezoneOffset)
+            }
+            val now = System.currentTimeMillis()
+            val delay = 60000 - (now % 60000)
+            clockHandler.postDelayed(this, delay)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -116,6 +130,9 @@ class MainActivity : AppCompatActivity() {
                     fetchWeather(savedHome)
                 }
             }
+
+            // 🏆 WORKMANAGER HOOK: Schedule silent background cache updates
+            scheduleWeatherRefresh()
         }
 
         // Setup RecyclerView
@@ -130,6 +147,9 @@ class MainActivity : AppCompatActivity() {
         btnChooseAreaIcon.setOnClickListener {
             showChooseAreaDialog()
         }
+
+        // Initialize WorkManager on boot
+        scheduleWeatherRefresh()
 
         // Check if permissions are already granted
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
@@ -322,8 +342,8 @@ class MainActivity : AppCompatActivity() {
         
         // Date Time
         // 🏆 UPDATED: Extracts the city's timezone offset and formats its actual live time profile
-        val cityTimezoneOffset = weatherData.timezone ?: 0
-        tvDateTimeLabel.text = WeatherUtils.formatLocalTimeWithOffset(cityTimezoneOffset)
+        currentCityTimezoneOffset = weatherData.timezone ?: 0
+        startLiveClock()
 
         // 🏆 CACHE ENGINE HOOK: Serialize the fresh data object and save a backup snapshot copy
         try {
@@ -354,6 +374,34 @@ class MainActivity : AppCompatActivity() {
             VibeEngine.WeatherVibe.NIGHT -> R.drawable.bg_weather_night
         }
         swipeRefreshLayout.setBackgroundResource(backgroundDrawableId)
+    }
+
+    private fun startLiveClock() {
+        clockHandler.removeCallbacks(clockRunnable)
+        clockHandler.post(clockRunnable)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        clockHandler.removeCallbacks(clockRunnable)
+    }
+
+    private fun scheduleWeatherRefresh() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val periodicWorkRequest = PeriodicWorkRequestBuilder<WeatherRefreshWorker>(
+            15, java.util.concurrent.TimeUnit.MINUTES
+        )
+            .setConstraints(constraints)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "WeatherCacheAutoRefresh",
+            ExistingPeriodicWorkPolicy.KEEP,
+            periodicWorkRequest
+        )
     }
 
 
