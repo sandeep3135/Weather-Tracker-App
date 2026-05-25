@@ -1,14 +1,12 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
 }
 
 android {
     namespace = "com.example.weathertrackerapp"
-    compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
-    }
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.weathertrackerapp"
@@ -18,6 +16,21 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        val properties = Properties()
+        val propertiesFile = rootProject.file("local.properties")
+        if (propertiesFile.exists()) {
+            properties.load(propertiesFile.inputStream())
+        }
+        val apiKey = properties.getProperty("OPENWEATHER_API_KEY") ?: ""
+
+        // Inject it as a dynamic string value into your generated BuildConfig file
+        buildConfigField("String", "WEATHER_API_KEY", "\"$apiKey\"")
+    }
+
+    // Ensure BuildConfig generation is enabled
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {
@@ -44,7 +57,6 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-
 
     // Retrofit core library for making HTTP internet requests
     implementation("com.squareup.retrofit2:retrofit:2.9.0")

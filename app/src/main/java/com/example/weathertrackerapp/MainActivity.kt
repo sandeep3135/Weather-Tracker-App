@@ -30,7 +30,7 @@ import java.util.*
 
 class MainActivity : AppCompatActivity() {
 
-    private val apiKey = "90b07aff560023aa2b1fa6eb5695c91d"
+    private val apiKey = BuildConfig.WEATHER_API_KEY
     private val prefsName = "WeatherPrefs"
     private val keyHomeCity = "home_city"
 

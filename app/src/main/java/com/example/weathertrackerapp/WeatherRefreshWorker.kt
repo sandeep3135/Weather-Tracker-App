@@ -19,7 +19,7 @@ class WeatherRefreshWorker(
         // 2. Extract the user's saved home city from preferences
         val prefs = applicationContext.getSharedPreferences("WeatherPrefs", Context.MODE_PRIVATE)
         val homeCity = prefs.getString("home_city", "Raipur") ?: "Raipur"
-        val apiKey = "90b07aff560023aa2b1fa6eb5695c91d"
+        val apiKey = BuildConfig.WEATHER_API_KEY
 
         return try {
             // 3. Make a direct, synchronous network pass to fetch fresh data
